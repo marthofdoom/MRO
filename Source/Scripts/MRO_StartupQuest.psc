@@ -61,6 +61,13 @@ Float _bonusEN      = 0.0
 String _activeWeaponSkill = ""
 Bool   _introShown = false
 
+; Bump SCRIPT_VERSION whenever an update needs migration on existing
+; saves (new arrays, changed registrations, re-applied state). The
+; saved _installedVersion lags behind after an update-in-place, and
+; the next heartbeat runs RunUpgrade() exactly once.
+Int Property SCRIPT_VERSION = 1 AutoReadOnly
+Int _installedVersion = 0
+
 ; Per-skill XP accumulators (fraction of the current level, 0-1).
 ; We own the XP curve explicitly (CSF's AdvanceSkill curve is opaque and
 ; only exposes integer levels) so the MCM can show granular progress.
@@ -92,6 +99,11 @@ EndEvent
 ; UPDATE CYCLE
 ; ===============================================================
 Event OnUpdate()
+    If _installedVersion != SCRIPT_VERSION
+        RunUpgrade(_installedVersion)
+        _installedVersion = SCRIPT_VERSION
+    EndIf
+
     ApplyGMSTFeatures()
     RefreshFollowerAbilities()
 
@@ -117,6 +129,52 @@ Event OnUpdate()
 
     RegisterForSingleUpdate(30.0)
 EndEvent
+
+; ===============================================================
+; UPDATE-IN-PLACE MIGRATION
+; Runs once when the shipped script is newer than what this save
+; last ran. Quiet on fresh installs (the intro covers those);
+; notifies when an existing playthrough was upgraded.
+; ===============================================================
+Function RunUpgrade(Int fromVersion)
+    ; Mastery XP accumulators: create or migrate if the skill count
+    ; ever changes between versions.
+    If !_mxp
+        _mxp = new Float[13]
+    ElseIf _mxp.Length != 13
+        Float[] fresh = new Float[13]
+        Int i = 0
+        Int copyMax = _mxp.Length
+        If copyMax > 13
+            copyMax = 13
+        EndIf
+        While i < copyMax
+            fresh[i] = _mxp[i]
+            i += 1
+        EndWhile
+        _mxp = fresh
+    EndIf
+
+    ; Re-assert everything that must survive an update: settings,
+    ; abilities, and event registrations (all idempotent).
+    ApplyGMSTFeatures()
+    GiveAbilitiesTo(PlayerRef)
+    RefreshAbilities()
+    RefreshFollowerAbilities()
+    If MasteryEnabled()
+        RegisterForActorAction(0)
+        RegisterForActorAction(2)
+        RegisterForActorAction(6)
+        RegisterForMenu("Crafting Menu")
+        RegisterForMenu("EnchantConstructMenu")
+    EndIf
+
+    ; Only announce true mid-playthrough upgrades, and only when the
+    ; intro already ran (a fresh install announces via the intro).
+    If MRO_SetupDone && MRO_SetupDone.GetValueInt() == 1
+        Debug.Notification("Marth Requiem Overhaul: updated in place, settings re-applied.")
+    EndIf
+EndFunction
 
 ; ===============================================================
 ; FIRST-RUN INTRO
