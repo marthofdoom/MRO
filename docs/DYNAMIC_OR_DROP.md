@@ -49,6 +49,21 @@ FIXABLE (dynamic path identified, not yet implemented), PORTABLE (fine as-is).
   static tuning is acceptable for an optional.
 - SEQ file, FOMOD, ESL flagging — portable packaging.
 
+## Considered direction: native hybrid (CommonLibSSE-NG)
+
+User decision 2026-07-04: evaluate a partial rewrite as one small native
+SKSE DLL (C++/CommonLibSSE-NG — the modern ecosystem standard) alongside
+the existing ESP + Papyrus shell. It would resolve in one move:
+- Vendor gold DROP-CANDIDATE (patch LVLI counts at data-load, dynamic)
+- DR curve FIXABLE + the 24-perk quantization + 30s lag (damage hook,
+  exact continuous formula, player/follower scoping)
+- Absorb base-magnitude approximation (hook real damage application)
+- Global resist-cap caveat (per-actor clamp hook)
+Papyrus keeps: MCM, mastery bookkeeping, intro/upgrade logic.
+Costs: C++ toolchain (Windows-centric; build via CI or msvc-wine from
+Linux), CTD risk from native bugs, engine-update maintenance (mitigated
+by Address Library). Tooling: ClibDT (2026), vcpkg/Conan templates.
+
 ## Release gate
 
 Before tagging 1.0: every DROP-CANDIDATE resolved (implemented dynamic or
