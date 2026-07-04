@@ -295,26 +295,34 @@ EndEvent
 Event OnMenuClose(String asMenuName)
     If asMenuName == "Crafting Menu"
         If PlayerRef.GetBaseActorValue("Smithing") >= 100.0
-            GrantMasteryXP(ID_SM, CustomSkills.GetSkillLevel(ID_SM), 5.0)
+            GrantMasteryXP(ID_SM, CustomSkills.GetSkillLevel(ID_SM))
         EndIf
         If PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
-            GrantMasteryXP(ID_AC, CustomSkills.GetSkillLevel(ID_AC), 5.0)
+            GrantMasteryXP(ID_AC, CustomSkills.GetSkillLevel(ID_AC))
         EndIf
     ElseIf asMenuName == "EnchantConstructMenu"
         If PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
-            GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN), 5.0)
+            GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN))
         EndIf
     EndIf
 EndEvent
 
 ; ===============================================================
 ; MASTERY XP GRANT
-; Actions to finish a level: 200 at mastery 0, growing linearly to
-; 800 at the cap. MRO_MasteryBaseGrant scales speed (2.0 = twice as
-; fast). weight lets slow triggers (combat ticks, crafting sessions)
-; count as several actions.
+; LoreRim disables vanilla use-based skill XP entirely (Static Skill
+; Leveling zeroes every skill's useMult), so masteries are the only
+; use-trained progression and there is no vanilla curve to copy.
+; Cost per level is therefore denominated in each discipline's own
+; trigger and normalized to comparable real-time effort at level 0
+; (roughly 10-15 minutes of focused activity), respecting the
+; relative difficulty the load order still encodes in improveMult
+; (combat/magic 2.0 > alchemy 1.6 > enchanting 1.0 > smithing 0.25):
+;   weapons  200 swings/shots      armor    20 combat ticks (30s each)
+;   magic    150 casts             crafting 15/12/10 sessions
+; Cost grows linearly to 4x by the mastery cap.
+; MRO_MasteryBaseGrant scales speed globally (2.0 = twice as fast).
 ; ===============================================================
-Function GrantMasteryXP(String skillId, Int currentMastery, Float weight = 1.0)
+Function GrantMasteryXP(String skillId, Int currentMastery)
     Int idx = SkillIndex(skillId)
     If idx < 0
         Return
@@ -331,13 +339,29 @@ Function GrantMasteryXP(String skillId, Int currentMastery, Float weight = 1.0)
     If MRO_MasteryBaseGrant
         baseGrant = MRO_MasteryBaseGrant.GetValue()
     EndIf
-    Float needed = 200.0 + 600.0 * (n / cap)
-    _mxp[idx] = _mxp[idx] + (weight * baseGrant / needed)
+    Float needed = ActionsAtZero(idx) * (1.0 + 3.0 * (n / cap))
+    _mxp[idx] = _mxp[idx] + (baseGrant / needed)
     If _mxp[idx] >= 1.0
         _mxp[idx] = _mxp[idx] - 1.0
         CustomSkills.IncrementSkill(skillId)
         CustomSkills.ShowSkillIncreaseMessage(skillId, currentMastery + 1)
     EndIf
+EndFunction
+
+; Actions to complete mastery level 0, per skill (indices from SkillIndex).
+Float Function ActionsAtZero(Int idx)
+    If idx <= 2
+        Return 200.0    ; OneHanded/TwoHanded/Marksman: per swing or shot
+    ElseIf idx <= 4
+        Return 20.0     ; LightArmor/HeavyArmor: per 30s in-combat tick
+    ElseIf idx <= 9
+        Return 150.0    ; magic schools: per cast
+    ElseIf idx == 10
+        Return 10.0     ; Smithing: per crafting session (impMult 0.25 = easiest)
+    ElseIf idx == 11
+        Return 15.0     ; Alchemy: per session (impMult 1.6)
+    EndIf
+    Return 12.0         ; Enchanting: per session (impMult 1.0)
 EndFunction
 
 Int Function SkillIndex(String skillId)
@@ -541,9 +565,9 @@ EndFunction
 Function GrantCombatArmorXP()
     Int wornClass = WornChestWeightClass()
     If wornClass == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
-        GrantMasteryXP(ID_LA, CustomSkills.GetSkillLevel(ID_LA), 10.0)
+        GrantMasteryXP(ID_LA, CustomSkills.GetSkillLevel(ID_LA))
     ElseIf wornClass == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
-        GrantMasteryXP(ID_HA, CustomSkills.GetSkillLevel(ID_HA), 10.0)
+        GrantMasteryXP(ID_HA, CustomSkills.GetSkillLevel(ID_HA))
     EndIf
 EndFunction
 

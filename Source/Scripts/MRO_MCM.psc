@@ -159,7 +159,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidVendorGold
         SetInfoText("All 13 vendor gold pools doubled from your load order's values. Baked into MRO.esp - reinstall to change.")
     ElseIf a_option == _oidMasteryCap
-        SetInfoText("Levels each mastery needs for its full bonus (50-200). Higher = longer grind, same maximum. XP per level: ~2x the vanilla 99-100 effort, growing with depth.")
+        SetInfoText("Levels each mastery needs for its full bonus (50-200). Higher = longer grind, same maximum. Per-level cost is discipline-specific (swings, casts, combat time, craft sessions) and quadruples by the cap.")
     ElseIf a_option == _oidDrain
         SetInfoText("Alduin's Drain Vitality is UNRESISTABLE and drains ~25 HP per pulse. Raw HP is the only defense - resistances do not help.")
     ElseIf a_option == _oidAldP1
