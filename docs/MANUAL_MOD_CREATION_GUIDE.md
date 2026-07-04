@@ -158,6 +158,10 @@ its LVLI GRUP for `(fid >> 24) == thatIndex` matches. Last match wins.
 
 ## 3. Compiling Papyrus on Linux
 
+> In this repo, `tools/compile.sh` wraps everything below with all paths
+> baked in — use it. The raw recipe here is for reproducing the setup on
+> another machine.
+
 System wine usually lacks Mono → `PapyrusCompiler.exe` (a .NET app) won't run.
 **Proton Hotfix's wine bundles wine-mono** and works:
 
