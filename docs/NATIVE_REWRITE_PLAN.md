@@ -16,7 +16,13 @@ scratch.
 | 1 | Exact continuous DR curve past cap, player/follower-scoped | [gottyduke/ArmorRatingRescaledRemake](https://github.com/gottyduke/ArmorRatingRescaledRemake) | Trampoline hook on the armor DR calculation (Address Library IDs). We add an actor check: player/teammate -> our kinked curve with mastery ceiling; everyone else -> vanilla. Replaces the 24-perk ladder + 30s lag |
 | 2 | Per-actor resistance behavior + elemental absorb on real damage | [Jampi0n/Skyrim-ResistancesRescaled](https://github.com/Jampi0n/Skyrim-ResistancesRescaled) | Per-resistance damage-reduction hook, already player-scoped — solves "enemies also uncap" AND gives the exact applied damage, so absorb heals true numbers (enchants, traps, everything). Replaces MRO_AbsorbMGEF approximations |
 | 3 | Vendor gold doubling, dynamic on any load order | plain SKSE kDataLoaded handler (pattern in every template) | On data-loaded: look up the 13 VendorGold* LVLIs by EditorID, double counts in memory. No baked records — DROP-CANDIDATE resolved |
-| 4 | (later) hit events, temper caps | po3 CommonLibSSE usage | Only if we retire more Papyrus |
+| 4 | Event sinks (hit/menu/cast) + config bridge | TESHitEvent etc. — the most documented CommonLibSSE pattern | Retires MRO_EventsMGEF shim + PO3 event dependency |
+| 5 | Mastery bookkeeping (stretch) | [Exit-9B/CustomSkills](https://github.com/Exit-9B/CustomSkills) — CSF is open source (MIT), itself native; skills are GlobalVariable-backed | Read CSF's source for exact level/XP semantics; drive skills natively. KNOWN VARIABLE per user's criterion (2026-07-04) — but only port if play-tested Papyrus mastery gains something concrete |
+
+M4 scoping rule (user, 2026-07-04): port everything that is a *known
+variable* (documented pattern or readable source); do not port working,
+light Papyrus just for purity. Confirmed working in 0.5.1 play:
+one-handed, restoration, evasion mastery XP all accruing.
 
 ## Toolchain (decided by constraints)
 
