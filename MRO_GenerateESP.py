@@ -554,6 +554,7 @@ def make_perks() -> bytes:
         # hidden=0, and NO trailing PRKF after the final entry (vanilla
         # omits it; a trailing PRKF makes the loader reject the record).
         body  = subrec('EDID', zstr("MRO_DR%02dPerk" % d))
+        body += subrec('FULL', zstr("MRO Damage Resist %d%%" % d))
         body += subrec('DESC', zstr(""))
         body += subrec('DATA', bytes([0, 0, 1, 1, 0]))   # trait0 lvl0 ranks1 playable notHidden
         body += subrec('PRKE', bytes([2, 0, 0]))          # type 2 = entry point
@@ -578,6 +579,7 @@ def make_speech_perks() -> bytes:
         buy_mult  = 1.0 - 0.04 * rung
         sell_mult = 1.0 + 0.05 * rung
         body  = subrec('EDID', zstr("MRO_Barter%02dPerk" % rung))
+        body += subrec('FULL', zstr("MRO Barter Rank %d" % rung))
         body += subrec('DESC', zstr(""))
         body += subrec('DATA', bytes([0, 0, 1, 1, 0]))
         body += subrec('PRKE', bytes([2, 0, 0]))
