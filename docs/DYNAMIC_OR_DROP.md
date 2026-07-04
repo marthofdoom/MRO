@@ -10,7 +10,14 @@ FIXABLE (dynamic path identified, not yet implemented), PORTABLE (fine as-is).
 
 ## DROP-CANDIDATE
 
-### Vendor gold doubling
+(none — vendor gold resolved natively in v0.6.0)
+
+### Vendor gold doubling — RESOLVED 2026-07-04 (v0.6.0, native M1)
+MRO.dll doubles the 13 vanilla VendorGold* lists in memory at
+kDataLoaded — fully dynamic on any load order. Baked LVLI records and
+the generator's load-order scan retired. Original notes kept below.
+
+### (historical) Vendor gold doubling
 - Baked: 13 LVLI overrides with counts doubled from the winning override
   found by scanning this machine's plugins.txt/modlist.txt.
 - Why not dynamic yet: leveled-list counts cannot be modified at runtime

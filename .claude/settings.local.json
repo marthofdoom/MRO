@@ -25,7 +25,9 @@
       "Read(//mnt/gaming/modlists/LoreRim/mods/**)",
       "WebSearch",
       "Bash(git add *)",
-      "Bash(git commit -q -m 'Track native hybrid \\(CommonLibSSE-NG\\) as considered 1.0 direction *)"
+      "Bash(git commit -q -m 'Track native hybrid \\(CommonLibSSE-NG\\) as considered 1.0 direction *)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/CharmedBaryon/CommonLibSSE-NG/main/include/RE/T/TESLeveledList.h\")",
+      "Bash(tools/compile.sh MRO_MCM)"
     ]
   }
 }

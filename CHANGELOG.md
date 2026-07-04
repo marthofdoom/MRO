@@ -4,6 +4,16 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.6.0 — 2026-07-04
+
+### Changed (native M1)
+- Vendor gold doubling moved into MRO.dll: the 13 vanilla VendorGold*
+  lists are doubled in memory at data load — dynamic on any load order.
+  Baked LVLI overrides and the generator load-order scan retired.
+  Values on LoreRim are identical to 0.5.x; merchants update on their
+  next restock. Requires the MRO.dll from this release.
+- Last DYNAMIC_OR_DROP drop-candidate resolved.
+
 ## v0.5.1 — 2026-07-04
 
 ### Fixed

@@ -166,7 +166,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.5.1"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.6.0"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -729,7 +729,8 @@ def main():
     esp.write(make_gmsts())
     esp.write(make_globs({"MRO_T_DR99Armor": float(dr99)}))
     esp.write(make_flsts())
-    esp.write(make_lvlis(winners))
+    # Vendor gold LVLI overrides retired in v0.6.0: MRO.dll doubles the
+    # lists in memory at data load (dynamic on any load order).
     esp.write(make_mgefs())
     esp.write(make_perks())
     esp.write(make_spels())
@@ -758,7 +759,7 @@ def main():
     print(f"  GLOB  x{len(GLOBALS)}     (feature flags + mastery config)")
     print(f"  FLST  x1      (MRO_DRPerkList: 24 DR perks)")
     print(f"  PERK  x24     (physical DR ladder 76-99%, Mod Incoming Damage)")
-    print(f"  LVLI  x{len(winners)}     (vendor gold doubled from load-order values)")
+    print(f"  (vendor gold now doubled at runtime by MRO.dll — no LVLI records)")
     print(f"  MGEF  x2      (AbsorbMGEF with script, CarryWeightMGEF value modifier)")
     print(f"  SPEL  x2      (AbsorbAbility, CarryWeightAbility)")
     print(f"  QUST  x2      (MRO_StartupQuest, MRO_MCMQuest)")

@@ -194,7 +194,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidMastery
         SetInfoText("13 skills that unlock at base skill 100 and grow with use. Armor masteries need a matching chest piece worn.")
     ElseIf a_option == _oidVendorGold
-        SetInfoText("All 13 vendor gold pools doubled from your load order's values. Baked into MRO.esp - reinstall to change.")
+        SetInfoText("All 13 vendor gold pools doubled at game load by MRO.dll - adapts to any load order. Merchants pick it up on their next restock.")
     ElseIf a_option == _oidMasteryCap
         SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost follows the vanilla skill curve extended past 100: mastery n prices like skill level 100+n, so level 200 costs 9x level 1. Discipline-specific actions (landed hits, casts, combat time, sessions).")
     ElseIf a_option == _oidAbsorbMax
