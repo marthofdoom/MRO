@@ -80,6 +80,25 @@ Goal: new MCM-toggleable feature "X" driven by a GlobalVariable.
 - After changing GLOB defaults or record layouts, reinstall the zip in
   MO2 before testing — the game reads the installed copy, not the repo.
 
+## Native plugin loop (M0+; plan in NATIVE_REWRITE_PLAN.md)
+
+GitHub: private repo `marthofdoom/MRO` (this repo's origin). gh CLI at
+`~/.local/bin/gh` (use the absolute path; auth is in the keyring).
+
+```bash
+GH=~/.local/bin/gh
+git push                                   # native/** changes trigger CI
+$GH run list --limit 1                     # get run id
+$GH run watch <id> --exit-status           # ~5-20 min (vcpkg cold cache)
+$GH run download <id> -n MRO-dll -D /tmp/mro-dll
+cp /tmp/mro-dll/MRO.dll "/mnt/gaming/modlists/LoreRim/mods/MRO/SKSE/Plugins/"
+```
+
+Rules: C++ sources live in native/; copy hook patterns from the
+reference repos in NATIVE_REWRITE_PLAN.md, never from memory. One hook
+per release, each behind an MRO.ini toggle. Push versions with
+`git push origin --tags` after every release.sh run.
+
 ## Environment facts
 
 - MO2 instance: /mnt/gaming/modlists/LoreRim (profile Default;
