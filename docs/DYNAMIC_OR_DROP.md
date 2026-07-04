@@ -33,6 +33,16 @@ FIXABLE (dynamic path identified, not yet implemented), PORTABLE (fine as-is).
   a load order with a very different cap shifts the top end slightly.
   Exact on any cap requires the native rewrite.
 
+## GENERATION-DERIVED DEFAULTS (acceptable: runtime slider overrides)
+
+### DR99Armor default (added v0.5.0)
+- The 99%-DR armor target's DEFAULT is estimated at generation time from
+  the load order's best obtainable heavy set (+ tempering headroom).
+  LoreRim: best set 1760 + temper 600 -> target 3000.
+- Acceptable under the 1.0 rule because it is only a default — the MCM
+  slider is the runtime authority. Revisit if the native rewrite lands
+  (could compute in-game).
+
 ## PORTABLE (verified fine as-is)
 
 - fPlayerMaxResistance=10000 GMST override — generic.

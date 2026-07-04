@@ -4,6 +4,23 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.5.0 — 2026-07-04
+
+### Changed
+- DR ladder is now a MASTERY PERK: it only functions with the matching
+  armor mastery, and the reachable DR ceiling scales with mastery level
+  (99% requires BOTH max armor AND full mastery). Followers share the
+  player's mastery. First of the planned per-skill mastery perks.
+- 99%-DR armor target auto-calibrated from the load order's best
+  obtainable heavy gear at generation time (LoreRim: 3000). MCM slider
+  range extended to 4500.
+
+### Decided
+- Native (CommonLibSSE-NG) rewrite deferred: cannot be done crash-safe
+  in one shot without a toolchain and iterative in-game testing. It
+  remains the planned vehicle for 1.0's dynamic vendor gold and exact
+  damage hooks.
+
 ## v0.4.2 — 2026-07-04
 
 ### Changed

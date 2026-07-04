@@ -130,7 +130,7 @@ Event OnOptionSliderOpen(Int a_option)
     ElseIf a_option == _oidAbsorbMax
         SliderSetup(MRO_T_AbsorbMax, 200.0, 125.0, 400.0, 25.0)
     ElseIf a_option == _oidDR99Armor
-        SliderSetup(MRO_T_DR99Armor, 2000.0, 1000.0, 4000.0, 100.0)
+        SliderSetup(MRO_T_DR99Armor, 2000.0, 1000.0, 4500.0, 100.0)
     ElseIf a_option == _oidArmorMastB
         SliderSetup(MRO_T_ArmorMasteryBonus, 300.0, 0.0, 600.0, 25.0)
     ElseIf a_option == _oidWeapMastB
@@ -182,7 +182,7 @@ Event OnOptionHighlight(Int a_option)
     If a_option == _oidResistCap
         SetInfoText("Removes the 75% elemental resistance cap. 100% = immunity. Global: highly resistant enemies also gain immunity to their own element.")
     ElseIf a_option == _oidArmorCap
-        SetInfoText("Physical DR keeps scaling past 75% for you and followers: 99% at ~2000 armor rating. Curve below 750 armor is unchanged. Armor UI still displays 75.")
+        SetInfoText("MASTERY PERK: physical DR past the engine cap requires the matching armor mastery. Your reachable ceiling grows with mastery level (99% only at full mastery AND max armor). Followers share your mastery. Armor UI still displays the engine cap.")
     ElseIf a_option == _oidAbsorb
         SetInfoText("Resistance above 100% heals you for that element's damage: 1% per point over 100, full heal at 200%. Covers spells, enchants, drains, poisons.")
     ElseIf a_option == _oidCarryWeight
@@ -200,7 +200,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidAbsorbMax
         SetInfoText("Resistance at which elemental absorb heals 100% of damage. Lower = absorb builds come online faster.")
     ElseIf a_option == _oidDR99Armor
-        SetInfoText("Armor rating needed to reach 99% physical DR. The curve starts at the engine cap (read live from your load order) and scales linearly to this point.")
+        SetInfoText("Armor rating needed for 99% physical DR (with full armor mastery). Default is auto-calibrated from your load order's best obtainable heavy set at generation time.")
     ElseIf a_option == _oidArmorMastB
         SetInfoText("Armor rating granted by a fully-leveled armor mastery while wearing a matching chest piece.")
     ElseIf a_option == _oidWeapMastB

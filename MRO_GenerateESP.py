@@ -164,7 +164,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.4.2"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.5.0"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -190,9 +190,11 @@ GLOBALS = [
     ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
 ]
 
-def make_globs() -> bytes:
+def make_globs(overrides: dict = None) -> bytes:
     out = BytesIO()
     for edid, fid, gtype, val in GLOBALS:
+        if overrides and edid in overrides:
+            val = overrides[edid]
         body  = subrec('EDID', zstr(edid))
         body += subrec('FNAM', gtype.encode('ascii'))
         body += subrec('FLTV', struct.pack('<f', val))
@@ -444,8 +446,10 @@ def _load_order() -> list:
     ordered = base + [p for p in plugins if p not in base and p != "MRO.esp"]
     return [(n, resolve(n)) for n in ordered if resolve(n)]
 
-def _scan_plugin_lvli(path: str, targets: dict, winners: dict):
-    """Update winners{local_fid: body_bytes} with this plugin's LVLI overrides."""
+def _scan_plugin_lvli(path: str, targets: dict, winners: dict, armo: dict = None, gmst: dict = None):
+    """One pass per plugin: LVLI winners (targets), plus optionally the
+    winning ARMO (slotflags, armortype, rating) per formid and winning
+    float GMSTs named in gmst{lower_edid: value}."""
     with open(path, 'rb') as f:
         data = f.read()
     if data[:4] != b'TES4':
@@ -466,7 +470,9 @@ def _scan_plugin_lvli(path: str, targets: dict, winners: dict):
     elif "skyrim.esm" in masters:
         sk_idx = masters.index("skyrim.esm")
     else:
-        return
+        sk_idx = -1
+        if armo is None and gmst is None:
+            return
 
     pos = 24 + tes4_size
     n = len(data)
@@ -475,7 +481,10 @@ def _scan_plugin_lvli(path: str, targets: dict, winners: dict):
             break
         gsize = struct.unpack_from('<I', data, pos+4)[0]
         label = data[pos+8:pos+12]
-        if label == b'LVLI':
+        want_lvli = label == b'LVLI' and sk_idx >= 0
+        want_armo = label == b'ARMO' and armo is not None
+        want_gmst = label == b'GMST' and gmst is not None
+        if want_lvli or want_armo or want_gmst:
             rp = pos + 24
             gend = pos + gsize
             while rp < gend - 24:
@@ -486,27 +495,91 @@ def _scan_plugin_lvli(path: str, targets: dict, winners: dict):
                     continue
                 rflags = struct.unpack_from('<I', data, rp+8)[0]
                 rfid   = struct.unpack_from('<I', data, rp+12)[0]
-                if rtype == b'LVLI' and (rfid >> 24) == sk_idx and (rfid & 0xFFFFFF) in targets:
-                    body = data[rp+24:rp+24+rsize]
-                    if rflags & 0x00040000:
-                        try:
-                            body = zlib.decompress(body[4:])
-                        except zlib.error:
-                            body = None
-                    if body is not None:
+                body = data[rp+24:rp+24+rsize]
+                if rflags & 0x00040000:
+                    try:
+                        body = zlib.decompress(body[4:])
+                    except zlib.error:
+                        body = None
+                if body is not None:
+                    if want_lvli and rtype == b'LVLI' and (rfid >> 24) == sk_idx and (rfid & 0xFFFFFF) in targets:
                         winners[rfid & 0xFFFFFF] = body
+                    elif want_armo and rtype == b'ARMO' and not (rflags & 0x4):  # skip Non-Playable
+                        parsed = _parse_armo(body)
+                        if parsed:
+                            armo[rfid & 0xFFFFFF] = parsed
+                    elif want_gmst and rtype == b'GMST':
+                        ep = body.find(b'EDID')
+                        dp = body.find(b'DATA')
+                        if ep == 0 and dp > 0:
+                            es = struct.unpack_from('<H', body, 4)[0]
+                            edid = body[6:6+es].rstrip(b'\x00').decode('ascii', 'replace').lower()
+                            if edid in gmst and struct.unpack_from('<H', body, dp+4)[0] == 4:
+                                gmst[edid] = struct.unpack_from('<f', body, dp+6)[0]
                 rp += 24 + rsize
         pos += gsize
 
-def find_vendor_gold_winners() -> dict:
+def _parse_armo(body: bytes):
+    """(slotflags, armortype, rating) from an ARMO body, or None."""
+    slot, atype, rating = None, None, None
+    off = 0
+    while off < len(body) - 6:
+        st = body[off:off+4]
+        ss = struct.unpack_from('<H', body, off+4)[0]
+        if st == b'BOD2' and ss >= 8:
+            slot  = struct.unpack_from('<I', body, off+6)[0]
+            atype = struct.unpack_from('<I', body, off+6+4)[0]
+        elif st == b'BODT' and ss >= 12:
+            slot  = struct.unpack_from('<I', body, off+6)[0]
+            atype = struct.unpack_from('<I', body, off+6+8)[0]
+        elif st == b'DNAM' and ss >= 4:
+            rating = struct.unpack_from('<i', body, off+6)[0] / 100.0
+        off += 6 + ss
+    if slot is None or atype is None or rating is None:
+        return None
+    return (slot, atype, rating)
+
+# Best obtainable heavy set from the load order -> default 99%-DR armor
+# target, so "extreme effort" is calibrated against gear that actually
+# exists. Model: best base per slot + full tempering (2x smithing-mastery
+# cap on 5 pieces) + skill/perk headroom (x1.75) + armor mastery (+300).
+ARMOR_SLOTS = {0x4: 'body', 0x1: 'head', 0x8: 'hands', 0x80: 'feet', 0x200: 'shield'}
+
+def estimate_dr99_armor(armo: dict, smith_max: float) -> int:
+    best = {}
+    for slot_flags, atype, rating in armo.values():
+        # Heavy only; Requiem rates endgame pieces very high (daedric
+        # chest = 600), so the sanity bound is generous. Multi-slot
+        # entries are creature skins / outfits, not equippable pieces.
+        if atype != 1 or not (5.0 <= rating <= 800.0):
+            continue
+        hits = [name for bit, name in ARMOR_SLOTS.items() if slot_flags & bit]
+        if len(hits) != 1:
+            continue
+        name = hits[0]
+        if rating > best.get(name, 0.0):
+            best[name] = rating
+    base = sum(best.values())
+    temper = 5 * smith_max * 2.0          # full tempering at doubled mastery cap
+    est = (base + temper) * 1.15 + 300.0  # skill-perk headroom + armor mastery
+    est = int(round(est / 100.0) * 100)
+    est = max(1500, min(4500, est))
+    print(f"  DR99 estimate: best heavy set {base:.0f} "
+          f"({', '.join(f'{k} {v:.0f}' for k, v in sorted(best.items()))}) "
+          f"+ temper {temper:.0f} -> target {est}")
+    return est
+
+def find_load_order_data():
+    """One walk: vendor-gold LVLI winners, winning ARMO stats, key GMSTs."""
     targets = {fid & 0xFFFFFF: edid for fid, edid in VENDOR_GOLD_FIDS.items()}
-    winners = {}
+    winners, armo = {}, {}
+    gmst = {'fsmithingarmormax': 60.0}
     for name, path in _load_order():
         try:
-            _scan_plugin_lvli(path, targets, winners)
+            _scan_plugin_lvli(path, targets, winners, armo, gmst)
         except (OSError, struct.error):
             pass
-    return winners
+    return winners, armo, gmst
 
 def _double_lvlo_counts(body: bytes) -> bytes:
     out, off = bytearray(), 0
@@ -623,11 +696,12 @@ def main():
     out_path = os.path.join(out_dir, "MRO.esp")
 
     esp = BytesIO()
-    winners = find_vendor_gold_winners()
+    winners, armo, gmst = find_load_order_data()
+    dr99 = estimate_dr99_armor(armo, gmst['fsmithingarmormax'])
 
     esp.write(make_tes4())
     esp.write(make_gmsts())
-    esp.write(make_globs())
+    esp.write(make_globs({"MRO_T_DR99Armor": float(dr99)}))
     esp.write(make_flsts())
     esp.write(make_lvlis(winners))
     esp.write(make_mgefs())

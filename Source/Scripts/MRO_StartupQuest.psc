@@ -257,14 +257,15 @@ Function RefreshAbilities()
 EndFunction
 
 ; ===============================================================
-; PHYSICAL DR ABOVE THE ENGINE'S ARMOR CAP
-; The engine's own cap and slope are read live from the GMSTs, so
-; the kink adapts to any load order (Requiem/LoreRim: 75% at 750).
-; Above the kink a hidden Mod Incoming Damage perk supplies:
-;   DR% = cap + (armor - kink) * (99 - cap) / (DR99Armor - kink)
-; where DR99Armor is the MCM slider (default 2000). The perk
-; multipliers assume a 75% engine cap; a load order with a very
-; different cap shifts the effective top end slightly.
+; PHYSICAL DR ABOVE THE ENGINE'S ARMOR CAP — "MASTERY PERKS"
+; The DR ladder is the armor masteries' signature perk: it only
+; functions with a matching-type chest piece worn AND the player's
+; corresponding armor mastery leveled. The reachable ceiling scales
+; with mastery:  ceiling = cap + (99 - cap) * masteryFraction
+; so 99% requires BOTH ~max armor rating AND full armor mastery.
+; Followers use their own worn chest type but the PLAYER's mastery
+; (the party ascends together). Engine cap and slope are read live
+; from the GMSTs; the armor-side 99% point is the MCM slider.
 ; Below the kink nothing changes; enemies never get these perks.
 ; ===============================================================
 Function UpdateArmorDRFor(Actor akActor)
@@ -272,30 +273,44 @@ Function UpdateArmorDRFor(Actor akActor)
         Return
     EndIf
     Int want = -1
-    If FeatureEnabled(MRO_F_ArmorCap)
-        Float capPct  = Game.GetGameSettingFloat("fMaxArmorRating")
-        Float scaling = Game.GetGameSettingFloat("fArmorScalingFactor")
-        If capPct < 20.0 || capPct > 95.0
-            capPct = 75.0
+    If FeatureEnabled(MRO_F_ArmorCap) && MasteryEnabled()
+        Float mFrac = 0.0
+        Int wc = WornChestClassOf(akActor)
+        If wc == 0
+            mFrac = GetMasteryFraction(ID_LA)
+        ElseIf wc == 1
+            mFrac = GetMasteryFraction(ID_HA)
         EndIf
-        If scaling <= 0.0
-            scaling = 0.1
-        EndIf
-        Float kink = capPct / scaling
-        Float target = 2000.0
-        If MRO_T_DR99Armor
-            target = MRO_T_DR99Armor.GetValue()
-        EndIf
-        If target <= kink + 100.0
-            target = kink + 100.0
-        EndIf
-        Float ar = akActor.GetActorValue("DamageResist")
-        If ar > kink
-            Int d = (capPct + (ar - kink) * (99.0 - capPct) / (target - kink)) as Int
-            If d > 99
-                d = 99
+        If mFrac > 0.0
+            Float capPct  = Game.GetGameSettingFloat("fMaxArmorRating")
+            Float scaling = Game.GetGameSettingFloat("fArmorScalingFactor")
+            If capPct < 20.0 || capPct > 95.0
+                capPct = 75.0
             EndIf
-            want = d - 76   ; stays -1 while below 76%
+            If scaling <= 0.0
+                scaling = 0.1
+            EndIf
+            Float kink = capPct / scaling
+            Float target = 2000.0
+            If MRO_T_DR99Armor
+                target = MRO_T_DR99Armor.GetValue()
+            EndIf
+            If target <= kink + 100.0
+                target = kink + 100.0
+            EndIf
+            Float ar = akActor.GetActorValue("DamageResist")
+            If ar > kink
+                Float ceiling = capPct + (99.0 - capPct) * mFrac
+                Float d = capPct + (ar - kink) * (99.0 - capPct) / (target - kink)
+                If d > ceiling
+                    d = ceiling
+                EndIf
+                Int di = d as Int
+                If di > 99
+                    di = 99
+                EndIf
+                want = di - 76   ; stays -1 while below 76%
+            EndIf
         EndIf
     EndIf
     Int i = 0
@@ -545,7 +560,15 @@ Float Function GetCurrentDRPct()
     EndIf
     Float ar = PlayerRef.GetActorValue("DamageResist")
     Float d = ar * scaling
-    If d < capPct || !FeatureEnabled(MRO_F_ArmorCap)
+    ; Mastery gate mirrors UpdateArmorDRFor
+    Float mFrac = 0.0
+    Int wc = WornChestWeightClass()
+    If wc == 0
+        mFrac = GetMasteryFraction(ID_LA)
+    ElseIf wc == 1
+        mFrac = GetMasteryFraction(ID_HA)
+    EndIf
+    If d < capPct || !FeatureEnabled(MRO_F_ArmorCap) || !MasteryEnabled() || mFrac <= 0.0
         If d > capPct
             Return capPct
         EndIf
@@ -560,6 +583,10 @@ Float Function GetCurrentDRPct()
         target = kink + 100.0
     EndIf
     d = capPct + (ar - kink) * (99.0 - capPct) / (target - kink)
+    Float ceiling = capPct + (99.0 - capPct) * mFrac
+    If d > ceiling
+        d = ceiling
+    EndIf
     If d > 99.0
         Return 99.0
     EndIf
@@ -676,7 +703,11 @@ EndFunction
 
 ; 0 = light, 1 = heavy, -1 = no chest armor worn
 Int Function WornChestWeightClass()
-    Armor chest = PlayerRef.GetWornForm(0x00000004) as Armor
+    Return WornChestClassOf(PlayerRef)
+EndFunction
+
+Int Function WornChestClassOf(Actor akActor)
+    Armor chest = akActor.GetWornForm(0x00000004) as Armor
     If !chest
         Return -1
     EndIf
