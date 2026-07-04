@@ -4,3 +4,7 @@
 
 # Wine/compiler droppings
 *.log
+
+# Native build outputs (CI artifacts, not sources)
+/native/build/
+/native/install/
