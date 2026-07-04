@@ -5,6 +5,7 @@ Scriptname MRO_StartupQuest extends Quest
 ; ===============================================================
 Spell    Property MRO_AbsorbAbility      Auto
 Spell    Property MRO_CarryWeightAbility Auto
+Spell    Property MRO_EventsAbility      Auto  ; hidden, always on: hosts PO3 event receivers
 Actor    Property PlayerRef              Auto
 FormList Property MRO_DRPerks            Auto  ; 24 perks, index 0 = 76% DR ... 23 = 99% DR
 FormList Property MRO_SpeechPerks        Auto  ; 5 perks, barter bonus rungs 1..5
@@ -72,7 +73,7 @@ Bool   _introShown = false
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 2 AutoReadOnly
+Int Property SCRIPT_VERSION = 3 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -102,10 +103,14 @@ Event OnInit()
 EndEvent
 
 Function RegisterMasteryEvents()
+    ; The always-on events ability hosts PO3 weapon-hit receivers
+    ; (PO3 per-form events never deliver to Quest scripts).
+    If MRO_EventsAbility && !PlayerRef.HasSpell(MRO_EventsAbility)
+        PlayerRef.AddSpell(MRO_EventsAbility, false)
+    EndIf
     If MasteryEnabled()
         RegisterForActorAction(0)   ; weapon swing: refresh equipped-weapon bonus
         RegisterForActorAction(2)   ; spell fire: magic school XP
-        PO3_Events_Form.RegisterForWeaponHit(self)   ; real hits: weapon XP
         RegisterForMenu("Crafting Menu")
         RegisterForMenu("EnchantConstructMenu")
         RegisterForMenu("BarterMenu")
@@ -387,12 +392,13 @@ Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
 EndEvent
 
 ; ===============================================================
-; WEAPON HITS (PO3) — the damage gate for weapon mastery XP.
-; Fires only when the player actually lands a weapon hit; XP only
-; for living, hostile actor targets, so furniture, training dummies,
-; followers, and air swings never count.
+; WEAPON HITS — the damage gate for weapon mastery XP. Called by
+; MRO_EventsMGEF (PO3 AME event receiver on the player); fires only
+; when the player actually lands a weapon hit. XP only for living,
+; hostile actor targets, so furniture, training dummies, followers,
+; and air swings never count.
 ; ===============================================================
-Event OnWeaponHit(ObjectReference akTarget, Form akSource, Projectile akProjectile, Int aiHitFlagMask)
+Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akProjectile)
     If !MasteryEnabled()
         Return
     EndIf
@@ -412,7 +418,7 @@ Event OnWeaponHit(ObjectReference akTarget, Form akSource, Projectile akProjecti
     ElseIf wSkill == "MK" && PlayerRef.GetBaseActorValue("Marksman") >= 100.0
         GrantMasteryXP(ID_MK, CustomSkills.GetSkillLevel(ID_MK))
     EndIf
-EndEvent
+EndFunction
 
 ; ===============================================================
 ; MENU CLOSE — Crafting mastery XP

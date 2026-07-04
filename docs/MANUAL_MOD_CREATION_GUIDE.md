@@ -214,12 +214,17 @@ BSA etc. at runtime, and Papyrus links by name at load.
   aliases needed), `GetEffectArchetypeAsString(mgef)`,
   `GetPrimaryActorValue(mgef)` — filter real damage effects from riders
   (frost Slow shares FrostResist with frost damage; archetype tells them apart).
-- PO3 player events (`PO3_Events_Form`, register any form incl. quests):
-  `RegisterForWeaponHit` → `OnWeaponHit(target, source, projectile, flags)`
-  fires on the player's actual landed weapon hits (melee AND arrows) — the
-  correct gate for "hit an enemy" logic; swing-detection via
-  `RegisterForActorAction(0)` fires on air swings too. Also `OnMagicHit`,
-  `OnItemCrafted`, `OnActorKilled`, `OnSkillIncrease`, etc.
+- PO3 player events: `RegisterForWeaponHit` → `OnWeaponHit(target, source,
+  projectile, flags)` fires on the player's actual landed weapon hits
+  (melee AND arrows) — the correct gate for "hit an enemy" logic;
+  swing-detection via `RegisterForActorAction(0)` fires on air swings too.
+  Also `OnMagicHit`, `OnItemCrafted`, `OnActorKilled`, `OnSkillIncrease`.
+  **CRITICAL: the receiving script must extend ObjectReference,
+  ActiveMagicEffect, or ReferenceAlias (use the matching PO3_Events_*
+  variant). Registering a Quest script "succeeds" but events are NEVER
+  delivered** — this silently zeroed weapon XP for a whole test pass.
+  Standard pattern: a hidden always-on ability whose ActiveMagicEffect
+  registers in OnEffectStart and forwards to the quest via a property.
   Note `RegisterForHitEventEx` is for hits ON the registered reference —
   not for the player's outgoing hits.
 - No max-actor-value getter in Papyrus: derive it via vanilla

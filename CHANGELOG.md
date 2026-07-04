@@ -4,6 +4,14 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.5.1 — 2026-07-04
+
+### Fixed
+- Weapon mastery XP was never granted in 0.4.x: PO3 per-form events do
+  not deliver to Quest scripts (registration silently succeeds). Hits
+  are now received by a hidden always-on ability (MRO_EventsMGEF) and
+  forwarded to the quest. Script v3 grants the ability on existing saves.
+
 ## v0.5.0 — 2026-07-04
 
 ### Changed

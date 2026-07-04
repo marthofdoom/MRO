@@ -64,6 +64,8 @@ FID_G_ABSORBMAX    = OWN | 0x812  # tuning: resist at which absorb = 100% (defau
 FID_G_DR99ARMOR    = OWN | 0x813  # tuning: armor rating where DR reaches 99% (default 2000)
 FID_G_ARMORMASTB   = OWN | 0x814  # tuning: armor mastery bonus at cap (default 300)
 FID_G_WEAPMASTB    = OWN | 0x815  # tuning: weapon mastery bonus %% at cap (default 50)
+FID_EVENTS_MGEF    = OWN | 0x816  # hidden AME hosting PO3 event receivers
+FID_EVENTS_SPELL   = OWN | 0x817  # always-on ability carrying it
 FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
@@ -164,7 +166,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.5.0"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.5.1"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -264,6 +266,20 @@ def make_mgefs() -> bytes:
     body += subrec('DNAM', zstr("Marth Requiem Overhaul: permanent bonus carry weight for you and your followers. Toggleable in the MRO MCM."))
     out.write(record('MGEF', FID_CW_MGEF, 0, body))
 
+    # ── EventsMGEF: hidden receiver for PO3 per-form events ──
+    # (PO3 events never deliver to Quest scripts; this AME forwards to
+    # the startup quest.) 0x8000 = Hide in UI.
+    vmad = VMADBuilder()
+    vmad.add_script("MRO_EventsMGEF", [
+        ("MRO_Quest", prop_obj(FID_STARTUP_QUEST)),
+    ])
+    body  = subrec('EDID', zstr("MRO_EventsMGEF"))
+    body += subrec('VMAD', vmad.build())
+    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x8600))
+    body += subrec('SNDD', b'')
+    body += subrec('DNAM', zstr(""))
+    out.write(record('MGEF', FID_EVENTS_MGEF, 0, body))
+
     return group('MGEF', out.getvalue())
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -315,6 +331,15 @@ def make_spels() -> bytes:
     body += spell_effect(FID_CW_MGEF, 150.0)
     out.write(record('SPEL', FID_CW_SPELL, 0, body))
 
+    # EventsAbility (hidden plumbing, no FULL so nothing shows anywhere)
+    body  = subrec('EDID', zstr("MRO_EventsAbility"))
+    body += subrec('OBND', bytes(12))
+    body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
+    body += subrec('DESC', zstr(""))
+    body += subrec('SPIT', spit())
+    body += spell_effect(FID_EVENTS_MGEF, 0.0)
+    out.write(record('SPEL', FID_EVENTS_SPELL, 0, body))
+
     return group('SPEL', out.getvalue())
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -340,6 +365,7 @@ def make_startup_quest() -> bytes:
         ("PlayerRef",            prop_obj(FREF_PLAYER)),
         ("MRO_AbsorbAbility",    prop_obj(FID_ABSORB_SPELL)),
         ("MRO_CarryWeightAbility", prop_obj(FID_CW_SPELL)),
+        ("MRO_EventsAbility",    prop_obj(FID_EVENTS_SPELL)),
         ("MRO_F_ResistCap",      prop_obj(FID_G_RESISTCAP)),
         ("MRO_F_ArmorCap",       prop_obj(FID_G_ARMORCAP)),
         ("MRO_F_Absorb",         prop_obj(FID_G_ABSORB)),

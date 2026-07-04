@@ -36,6 +36,7 @@ bytes. The engine rejects records silently; the diff always finds it.
 | Popup/effect repeats every load or randomly | State flag set AFTER a queued UI call, or FormIDs changed between installs orphaning globals | Latch before showing; never change FormIDs post-release |
 | Old script instances erroring in logs after update | Prior install had different FormIDs; orphaned instances in save | Inert noise on a test save; keep FormIDs stable so it never recurs |
 | Mastery/percent progress from swinging at air | RegisterForActorAction(0) fires on swings, not hits | PO3 `RegisterForWeaponHit` → OnWeaponHit; gate on living hostile Actor target |
+| PO3 event registered but NEVER fires (e.g. zero weapon XP) | Receiver script extends Quest — PO3 per-form events only deliver to ObjectReference/ActiveMagicEffect/ReferenceAlias scripts | Host registrations on a hidden always-on ability's AME (MRO_EventsMGEF pattern) and forward to the quest |
 | Vendor gold unchanged after LVLI override | Merchant chest only re-rolls on cell reset | Wait 72+ in-game hours away from the cell |
 | Feature works for player but not followers | Ability/perk granted to player only | Follower loop via `PO3_SKSEFunctions.GetPlayerFollowers()` in the heartbeat |
 | GMST you scale keeps growing each cycle | Reading back your own written value | Capture base before first write, keep in a saved script var |

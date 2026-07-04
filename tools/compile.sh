@@ -20,7 +20,7 @@ IMPORTS+=";$NEMESIS/scripts"
 
 scripts=("$@")
 if [[ "${1:-}" == "all" ]]; then
-    scripts=(MRO_StartupQuest MRO_MCM MRO_AbsorbMGEF)
+    scripts=(MRO_StartupQuest MRO_MCM MRO_AbsorbMGEF MRO_EventsMGEF)
 fi
 [[ ${#scripts[@]} -gt 0 ]] || { echo "usage: tools/compile.sh <ScriptName>... | all" >&2; exit 1; }
 
