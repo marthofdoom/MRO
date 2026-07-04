@@ -309,17 +309,16 @@ EndEvent
 
 ; ===============================================================
 ; MASTERY XP GRANT
-; LoreRim disables vanilla use-based skill XP entirely (Static Skill
-; Leveling zeroes every skill's useMult), so masteries are the only
-; use-trained progression and there is no vanilla curve to copy.
-; Cost per level is therefore denominated in each discipline's own
-; trigger and normalized to comparable real-time effort at level 0
-; (roughly 10-15 minutes of focused activity), respecting the
-; relative difficulty the load order still encodes in improveMult
-; (combat/magic 2.0 > alchemy 1.6 > enchanting 1.0 > smithing 0.25):
-;   weapons  200 swings/shots      armor    20 combat ticks (30s each)
-;   magic    150 casts             crafting 15/12/10 sessions
-; Cost grows linearly to 4x by the mastery cap.
+; Mastery level n is treated as skill level 100+n, continuing
+; vanilla's cost curve (improveMult * L^1.95) past the cap. We use
+; L^2 as the in-script approximation of L^1.95 (<6% error).
+; ActionsAtZero holds each skill's action count for the 100->101
+; step, computed from vanilla Skyrim.esm AVSK records with endgame
+; action values (daedric weapons, adept-expert spells, valuable
+; crafts) per UESP semantics. By mastery 200 (skill 300) each level
+; costs 9x its mastery-0 price, exactly tracking the vanilla curve.
+; LoreRim zeroes all use-based skill XP (Static Skill Leveling), so
+; this system is the list's only use-trained progression.
 ; MRO_MasteryBaseGrant scales speed globally (2.0 = twice as fast).
 ; ===============================================================
 Function GrantMasteryXP(String skillId, Int currentMastery)
@@ -339,7 +338,8 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     If MRO_MasteryBaseGrant
         baseGrant = MRO_MasteryBaseGrant.GetValue()
     EndIf
-    Float needed = ActionsAtZero(idx) * (1.0 + 3.0 * (n / cap))
+    Float lvl = (100.0 + n) / 100.0
+    Float needed = ActionsAtZero(idx) * lvl * lvl
     _mxp[idx] = _mxp[idx] + (baseGrant / needed)
     If _mxp[idx] >= 1.0
         _mxp[idx] = _mxp[idx] - 1.0
@@ -348,20 +348,39 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     EndIf
 EndFunction
 
-; Actions to complete mastery level 0, per skill (indices from SkillIndex).
+; Actions for the skill-100 -> 101 step, per skill (SkillIndex order).
+; Derived from vanilla AVSK (improveMult * 100^1.95 / XP-per-action):
+;   OneHanded  6.3*14dmg=88/act -> 181    TwoHanded 5.95*24=143 -> 111
+;   Marksman   9.3*19=177 -> 90           armor ~115/hit, ~3 hits/tick
+;   Destr 1.35*200cost=270 -> 59          Resto 2.0*80=160 -> 99
+;   Alter 3.0*200=600 -> 26               Conj  2.1*200=420 -> 38
+;   Illus 4.6*150=690 -> 23               Smith 160/item, ~5/session
+;   Alch  ~110/potion, ~5/session         Ench  900/item, ~2/session
 Float Function ActionsAtZero(Int idx)
-    If idx <= 2
-        Return 200.0    ; OneHanded/TwoHanded/Marksman: per swing or shot
+    If idx == 0
+        Return 180.0    ; OneHanded swings
+    ElseIf idx == 1
+        Return 110.0    ; TwoHanded swings
+    ElseIf idx == 2
+        Return 90.0     ; Marksman shots
     ElseIf idx <= 4
-        Return 20.0     ; LightArmor/HeavyArmor: per 30s in-combat tick
-    ElseIf idx <= 9
-        Return 150.0    ; magic schools: per cast
+        Return 45.0     ; Light/Heavy Armor 30s combat ticks
+    ElseIf idx == 5
+        Return 60.0     ; Destruction casts
+    ElseIf idx == 6
+        Return 100.0    ; Restoration casts (cheap heals)
+    ElseIf idx == 7
+        Return 30.0     ; Alteration casts
+    ElseIf idx == 8
+        Return 40.0     ; Conjuration casts
+    ElseIf idx == 9
+        Return 25.0     ; Illusion casts
     ElseIf idx == 10
-        Return 10.0     ; Smithing: per crafting session (impMult 0.25 = easiest)
+        Return 4.0      ; Smithing sessions (vanilla's fastest skill)
     ElseIf idx == 11
-        Return 15.0     ; Alchemy: per session (impMult 1.6)
+        Return 23.0     ; Alchemy sessions
     EndIf
-    Return 12.0         ; Enchanting: per session (impMult 1.0)
+    Return 5.0          ; Enchanting sessions
 EndFunction
 
 Int Function SkillIndex(String skillId)
