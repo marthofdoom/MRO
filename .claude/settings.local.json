@@ -17,7 +17,12 @@
       "Bash(grep -v \"^$\")",
       "Bash(grep -v \"/$\")",
       "Bash(awk '{print $NF}')",
-      "Bash(winetricks list-installed *)"
+      "Bash(winetricks list-installed *)",
+      "Bash(git config *)",
+      "Bash(git commit -q -m 'Initial commit: MRO v0.3.1 — working MCM, DR ladder, absorb, mastery, vendor gold *)",
+      "Bash(git tag *)",
+      "Read(//mnt/gaming/modlists/LoreRim/mods/Experience/**)",
+      "Read(//mnt/gaming/modlists/LoreRim/mods/**)"
     ]
   }
 }

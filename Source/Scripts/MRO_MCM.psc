@@ -232,7 +232,15 @@ Function RenderBossReadiness()
         If miraakMod
             AddTextOption("Modifier", "Immersive Miraak")
         EndIf
+        AddEmptyOption()
     EndIf
+
+    AddHeaderOption("Detected Mods")
+    String expStatus = "Not found"
+    If MiscUtil.FileExists("data/skse/plugins/Experience.dll")
+        expStatus = "Found (XP-based leveling)"
+    EndIf
+    AddTextOption("Experience", expStatus)
 EndFunction
 
 ; ==========================================================
@@ -287,12 +295,17 @@ Function RenderMastery()
     EndIf
 EndFunction
 
-; One compact row per skill: "level/cap  (+pct%)"
+; One compact row per skill: "level/cap +bonus% (progress% to next)"
 Function RenderSkillRow(MRO_StartupQuest q, String label, String skillId)
     Int lvl    = q.GetMasteryLevel(skillId)
     Int capInt = q.GetMasteryCap() as Int
     Int pct    = q.GetMasteryBonusPct(skillId) as Int
-    AddTextOption(label, (lvl as String) + "/" + (capInt as String) + "  +" + (pct as String) + "%")
+    Int prog   = q.GetMasteryProgressPct(skillId) as Int
+    String v = (lvl as String) + "/" + (capInt as String) + " +" + (pct as String) + "%"
+    If lvl < capInt
+        v += " (" + (prog as String) + "%)"
+    EndIf
+    AddTextOption(label, v)
 EndFunction
 
 ; ==========================================================

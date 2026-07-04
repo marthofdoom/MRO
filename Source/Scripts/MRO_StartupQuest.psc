@@ -61,6 +61,11 @@ Float _bonusEN      = 0.0
 String _activeWeaponSkill = ""
 Bool   _introShown = false
 
+; Per-skill XP accumulators (fraction of the current level, 0-1).
+; We own the XP curve explicitly (CSF's AdvanceSkill curve is opaque and
+; only exposes integer levels) so the MCM can show granular progress.
+Float[] _mxp
+
 ; ===============================================================
 ; STARTUP
 ; ===============================================================
@@ -290,37 +295,89 @@ EndEvent
 Event OnMenuClose(String asMenuName)
     If asMenuName == "Crafting Menu"
         If PlayerRef.GetBaseActorValue("Smithing") >= 100.0
-            GrantMasteryXP(ID_SM, CustomSkills.GetSkillLevel(ID_SM))
+            GrantMasteryXP(ID_SM, CustomSkills.GetSkillLevel(ID_SM), 5.0)
         EndIf
         If PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
-            GrantMasteryXP(ID_AC, CustomSkills.GetSkillLevel(ID_AC))
+            GrantMasteryXP(ID_AC, CustomSkills.GetSkillLevel(ID_AC), 5.0)
         EndIf
     ElseIf asMenuName == "EnchantConstructMenu"
         If PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
-            GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN))
+            GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN), 5.0)
         EndIf
     EndIf
 EndEvent
 
 ; ===============================================================
 ; MASTERY XP GRANT
-; Formula scales relative to cap so the difficulty curve is the
-; same shape whether cap is 50, 100, or 200.
-; xpGrant = BASE × (n+1)² / (2 × (cap+1+n)²)
+; Actions to finish a level: 200 at mastery 0, growing linearly to
+; 800 at the cap. MRO_MasteryBaseGrant scales speed (2.0 = twice as
+; fast). weight lets slow triggers (combat ticks, crafting sessions)
+; count as several actions.
 ; ===============================================================
-Function GrantMasteryXP(String skillId, Int currentMastery)
-    Float baseGrant = 1.0
-    If MRO_MasteryBaseGrant
-        baseGrant = MRO_MasteryBaseGrant.GetValue()
+Function GrantMasteryXP(String skillId, Int currentMastery, Float weight = 1.0)
+    Int idx = SkillIndex(skillId)
+    If idx < 0
+        Return
     EndIf
     Float cap = GetMasteryCap()
     Float n   = currentMastery as Float
     If n >= cap
         Return
     EndIf
-    Float n1 = n + 1.0
-    Float n2 = cap + 1.0 + n
-    CustomSkills.AdvanceSkill(skillId, baseGrant * (n1 * n1) / (2.0 * (n2 * n2)))
+    If !_mxp
+        _mxp = new Float[13]
+    EndIf
+    Float baseGrant = 1.0
+    If MRO_MasteryBaseGrant
+        baseGrant = MRO_MasteryBaseGrant.GetValue()
+    EndIf
+    Float needed = 200.0 + 600.0 * (n / cap)
+    _mxp[idx] = _mxp[idx] + (weight * baseGrant / needed)
+    If _mxp[idx] >= 1.0
+        _mxp[idx] = _mxp[idx] - 1.0
+        CustomSkills.IncrementSkill(skillId)
+        CustomSkills.ShowSkillIncreaseMessage(skillId, currentMastery + 1)
+    EndIf
+EndFunction
+
+Int Function SkillIndex(String skillId)
+    If skillId == ID_OH
+        Return 0
+    ElseIf skillId == ID_TH
+        Return 1
+    ElseIf skillId == ID_MK
+        Return 2
+    ElseIf skillId == ID_LA
+        Return 3
+    ElseIf skillId == ID_HA
+        Return 4
+    ElseIf skillId == ID_DS
+        Return 5
+    ElseIf skillId == ID_RS
+        Return 6
+    ElseIf skillId == ID_AL
+        Return 7
+    ElseIf skillId == ID_CJ
+        Return 8
+    ElseIf skillId == ID_IL
+        Return 9
+    ElseIf skillId == ID_SM
+        Return 10
+    ElseIf skillId == ID_AC
+        Return 11
+    ElseIf skillId == ID_EN
+        Return 12
+    EndIf
+    Return -1
+EndFunction
+
+; Progress within the current mastery level, 0-100.
+Float Function GetMasteryProgressPct(String skillId)
+    Int idx = SkillIndex(skillId)
+    If idx < 0 || !_mxp
+        Return 0.0
+    EndIf
+    Return _mxp[idx] * 100.0
 EndFunction
 
 Function GrantSpellMasteryXP(Spell sp)
@@ -484,9 +541,9 @@ EndFunction
 Function GrantCombatArmorXP()
     Int wornClass = WornChestWeightClass()
     If wornClass == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
-        GrantMasteryXP(ID_LA, CustomSkills.GetSkillLevel(ID_LA))
+        GrantMasteryXP(ID_LA, CustomSkills.GetSkillLevel(ID_LA), 10.0)
     ElseIf wornClass == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
-        GrantMasteryXP(ID_HA, CustomSkills.GetSkillLevel(ID_HA))
+        GrantMasteryXP(ID_HA, CustomSkills.GetSkillLevel(ID_HA), 10.0)
     EndIf
 EndFunction
 
