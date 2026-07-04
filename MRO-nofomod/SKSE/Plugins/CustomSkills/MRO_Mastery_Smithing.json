@@ -1,0 +1,7 @@
+{
+    "id": "MRO_Mastery_Smithing",
+    "name": "Smithing Mastery",
+    "description": "Mastery earned through countless hours at the forge beyond conventional limits. Unlocks after reaching 100 in Smithing.",
+    "levelCount": 200,
+    "ratio": 1.0
+}

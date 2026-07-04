@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip3 list *)",
+      "Bash(pip3 show *)",
+      "Bash(wine --version)",
+      "Bash(mono --version)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c \"import bethesda_structs; print\\(dir\\(bethesda_structs\\)\\)\")",
+      "Bash(apt-cache show *)",
+      "Bash(python3 -c \"from bethesda_structs.plugin import FNVPlugin; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from bethesda_structs import plugin; print\\(dir\\(plugin\\)\\)\")",
+      "Bash(python3 *)",
+      "Read(//home/marth/.wine/drive_c/windows/**)",
+      "Read(//home/marth/.wine/**)",
+      "Bash(WINEPREFIX=/home/marth/.wine /home/marth/.local/share/lutris/runners/wine/wine-ge-8-26-x86_64/bin/wine '/mnt/gaming/modlists/Authoria - Requiem Reforged/plugins/data/rootbuilder/CProgram_Files_\\(x86\\)SteamsteamappscommonSkyrim_Special_Edition/1_6_1170_0/Backup/Papyrus Compiler/PapyrusCompiler.exe')",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -v \"/$\")",
+      "Bash(awk '{print $NF}')",
+      "Bash(winetricks list-installed *)"
+    ]
+  }
+}

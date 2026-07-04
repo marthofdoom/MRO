@@ -1,0 +1,98 @@
+================================================================
+MARTH REQUIEM OVERHAUL (MRO) v0.3.1 — Mod Summary
+================================================================
+A terminal load-order mod for Requiem (built against LoreRim) that
+rebalances late-game power scaling. Early and mid game are untouched;
+every feature gates on endgame investment. Player and followers ascend;
+enemies keep their Requiem lethality.
+
+Requires: SKSE64, SkyUI 5.2+, Custom Skills Framework,
+          powerofthree's Papyrus Extender
+Load order: MRO.esp dead last.
+
+----------------------------------------------------------------
+ELEMENTAL RESISTANCES
+----------------------------------------------------------------
+- Resistance cap removed (75% -> uncapped, fPlayerMaxResistance 10000).
+  Fire/frost/shock/magic/poison all scale to 100% and beyond.
+  100% = full immunity to that element.
+  NOTE: global setting — highly resistant enemies also gain true
+  immunity to their own element. Carry a second damage type.
+
+- ELEMENTAL ABSORB (player + followers only):
+  Resistance above 100% converts incoming damage of that type to
+  healing: 1% of magnitude per point over 100, full 100% heal at 200%.
+  Covers hostile spells, weapon enchantments, drains (Magic Resist),
+  and poisons — each magic effect is matched to the resistance that
+  actually governs it. Only health-damaging effects count (frost slow
+  riders etc. are ignored). Toggleable in MCM.
+
+----------------------------------------------------------------
+PHYSICAL DAMAGE REDUCTION
+----------------------------------------------------------------
+- Engine armor cap stays 75% (750 armor rating at 0.10/point).
+  The curve below 750 armor is IDENTICAL to the unmodded load order.
+- Above 750 armor, player and followers keep scaling via hidden perks:
+      DR% = 75 + (armor - 750) x 0.0192
+      ~2000 armor rating = 99% DR (near-invulnerable)
+  Enemies never benefit; they stay hard-capped at 75%.
+  The armor UI still displays 75% — the extra reduction is real but
+  not shown in menus. Re-evaluated every 30 seconds. Toggleable in MCM.
+
+----------------------------------------------------------------
+SKILL MASTERY SYSTEM (13 skills, via Custom Skills Framework)
+----------------------------------------------------------------
+- Each mastery unlocks when its base skill reaches 100 and advances
+  through continued use of that skill. Cap adjustable 50-200 in MCM
+  (default 100); XP per level roughly doubles the vanilla 99->100
+  effort and grows with depth.
+- Bonuses at full mastery:
+    One-Handed / Two-Handed / Archery ... +50% attack damage
+    Evasion / Heavy Armor ............... +300 armor rating
+        (applies ONLY while wearing a chest piece of the matching
+         type; this is the intended path to 99% physical DR)
+    Destruction / Restoration / Alteration /
+    Conjuration / Illusion .............. +50 effective school skill
+    Smithing / Alchemy / Enchanting ..... +25% crafting potency
+- Toggleable in MCM; live progress shown on the Mastery page.
+
+----------------------------------------------------------------
+ECONOMY AND QUALITY OF LIFE
+----------------------------------------------------------------
+- Vendor gold doubled: all 13 vendor gold pools (general, blacksmiths,
+  apothecary, inn, spells, street, five fence tiers), built by doubling
+  the winning values from the load order. Baked into the ESP.
+- Carry weight +150 (player + followers, toggleable).
+- Arrow recovery 66% (vanilla 33%, toggleable).
+- Cell reset 72h / 168h cleared (Requiem default 30 days) — shops
+  restock reliably; dungeons also repopulate faster (toggleable).
+
+----------------------------------------------------------------
+MCM (3 pages)
+----------------------------------------------------------------
+- Boss Readiness: READY/CAUTION/NOT READY assessment for Alduin
+  (both fights), Harkon, Miraak — level, HP pool, fire resist, and
+  survivable Drain Vitality pulses. Thresholds auto-raise if World
+  Eater's Influence / Immersive Miraak Difficulty are detected.
+- Mastery: live level and bonus for all 13 skills; cap slider.
+- Features: live toggles for every runtime feature above.
+
+----------------------------------------------------------------
+OPTIONAL
+----------------------------------------------------------------
+- Rebalanced Experience.ini (if using the Experience mod): XP weighted
+  toward kills, group fights, above-level enemies, dungeon clears, and
+  quest milestones; less from map discovery. Same total speed as the
+  Faster Leveling preset.
+
+----------------------------------------------------------------
+DESIGN NOTES / KNOWN CAVEATS
+----------------------------------------------------------------
+- Everything dynamic runs on a 30-second script heartbeat: gear swaps
+  can take up to 30s to re-tier DR and mastery bonuses.
+- Absorb reads base enchantment records for weapons (NPC gear exact;
+  player-crafted enchant strength approximated).
+- Physical DR perks cover weapon/creature hits, not traps or falls.
+- Both vendor gold and the DR curve were derived from the live load
+  order; regenerate MRO.esp after major list updates.
+================================================================

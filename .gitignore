@@ -1,0 +1,6 @@
+# Current-build zips at the top level are transient; permanent copies live
+# in releases/vX.Y.Z/ (which IS tracked and never deleted).
+/MRO-*.zip
+
+# Wine/compiler droppings
+*.log

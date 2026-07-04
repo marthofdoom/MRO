@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fomod>
+  <Name>Marth Requiem Overhaul</Name>
+  <Author>Marth</Author>
+  <Version>0.3.1</Version>
+  <Description>A terminal load-order mod that rebalances Requiem's elemental mechanics,
+defense scaling, and late-game power curve.
+
+Core features:
+- Elemental resistance cap removed; resistances above 100% absorb spell and
+  enchantment damage as healing (1% per point, full absorb at 200%)
+- Physical DR scales past the 75% armor cap for the player and followers only,
+  reaching 99% at ~2000 armor rating; the curve below 750 armor is unchanged
+- 13-skill Mastery system: unlocks at base skill 100, advances through usage.
+  Combat skills up to +50% damage, armor skills up to +300 armor rating,
+  magic schools up to +50 effective skill, crafting up to +25%
+- Boss Readiness MCM: threat assessment for Alduin Phase 1 and Final,
+  Harkon, and Miraak; thresholds auto-adjust when World Eater's Influence
+  or Immersive Miraak Difficulty are detected
+- Live Feature Toggles MCM: resistance cap, armor DR scaling, absorb,
+  carry weight, arrow recovery, cell reset
+- Vendor gold doubled from load-order values
+- 3-day cell reset (from Requiem's 30-day default) for reliable restocking
+- First-run intro explains all changes; full customization via MCM
+- Optional Experience.ini: same total speed as Faster Leveling, weighted
+  toward kills and quest completion over pure exploration
+- Requires: SKSE64, SkyUI 5.2+ (MCM), Custom Skills Framework (Mastery),
+  powerofthree's Papyrus Extender
+- Compatible with: Experience.esp (XP rates), World Eater's Influence,
+  Immersive Miraak Difficulty</Description>
+  <Website></Website>
+</fomod>
