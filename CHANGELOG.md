@@ -4,6 +4,13 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.4.1 — 2026-07-04
+
+### Fixed
+- Ladder perks (DR + barter) now carry FULL names — console help lists
+  perks by display name, so nameless perks were invisible to `help` even
+  when loaded.
+
 ## v0.4.0 — 2026-07-04
 
 ### Fixed

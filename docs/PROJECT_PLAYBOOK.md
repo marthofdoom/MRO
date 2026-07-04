@@ -38,9 +38,10 @@ python3 MRO_GenerateESP.py MRO-nofomod/     # if generator changed (~60s)
 cp MRO-nofomod/MRO.esp MRO-flat/ && cp MRO-nofomod/SEQ/MRO.seq MRO-flat/SEQ/
 tools/compile.sh all                        # if any .psc changed
 python3 tools/audit_esp.py                  # must PASS
+VER=$(cat VERSION)                          # read BEFORE the subshell cd
 rm -f MRO-test-nofomod.zip MRO-v*.zip
 (cd MRO-nofomod && zip -rq ../MRO-test-nofomod.zip .)
-(cd MRO-flat    && zip -rq "../MRO-v$(cat VERSION).zip" .)
+(cd MRO-flat    && zip -rq "../MRO-v${VER}.zip" .)
 git add -A && git commit -m "..."
 ```
 Release-worthy state: `./release.sh <new-version>` instead of the zip
