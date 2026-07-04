@@ -4,6 +4,13 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.4.2 — 2026-07-04
+
+### Changed
+- Active effects renamed with MRO prefix and given real descriptions;
+  the meaningless "1%" magnitude on Elemental Absorb is hidden
+  (No Magnitude/No Duration MGEF flags).
+
 ## v0.4.1 — 2026-07-04
 
 ### Fixed

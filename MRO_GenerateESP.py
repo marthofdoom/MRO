@@ -164,7 +164,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.4.1"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.4.2"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -207,7 +207,9 @@ def make_globs() -> bytes:
 # Real MGEFs from Skyrim.esm confirm DATA=152. DNAM is a separate 4-byte subrecord
 # (localized description string index) — we omit it for non-localized plugins.
 
-def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery: int = 0) -> bytes:
+# MGEF flags: 0x200 = No Duration, 0x400 = No Magnitude (hides the
+# meaningless "1%" on script-archetype constant abilities in the UI)
+def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery: int = 0, flags: int = 0) -> bytes:
     # 152 bytes. Field positions verified against Requiem.esp scripted/value-mod MGEFs:
     #   [64] EffectType  (0=ValueModifier, 1=Script, …)
     #   [68] Primary AV
@@ -216,6 +218,7 @@ def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery
     #   [88] Secondary AV (0xFFFFFFFF=none)
     #  [112] DualCastScale (1.0)
     d = bytearray(152)
+    struct.pack_into('<I', d, 0, flags)
     struct.pack_into('<I', d, 12, 0xFFFFFFFF)  # MagicSkill = none
     struct.pack_into('<I', d, 16, 0xFFFFFFFF)  # MinSkillLevel = none
     struct.pack_into('<I', d, 64, effect_type)
@@ -245,18 +248,18 @@ def make_mgefs() -> bytes:
     ])
     body  = subrec('EDID', zstr("MRO_AbsorbMGEF"))
     body += subrec('VMAD', vmad.build())
-    body += subrec('FULL', zstr("Elemental Absorb"))
-    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF))
+    body += subrec('FULL', zstr("MRO - Elemental Absorb"))
+    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x600))
     body += subrec('SNDD', b'')
-    body += subrec('DNAM', zstr(""))
+    body += subrec('DNAM', zstr("Marth Requiem Overhaul: elemental resistances above 100% convert that element's damage into healing. Full absorption at the MCM-configured resistance (default 200%). Overhealing spills into stamina and magicka."))
     out.write(record('MGEF', FID_ABSORB_MGEF, 0, body))
 
     # ── CarryWeightMGEF: value modifier on CarryWeight, +150 ──
     body  = subrec('EDID', zstr("MRO_CarryWeightMGEF"))
-    body += subrec('FULL', zstr("Carry Weight Bonus"))
-    body += subrec('DATA', mgef_data(effect_type=0, primary_av=AV_CARRYWEIGHT))
+    body += subrec('FULL', zstr("MRO - Carry Weight Bonus"))
+    body += subrec('DATA', mgef_data(effect_type=0, primary_av=AV_CARRYWEIGHT, flags=0x200))
     body += subrec('SNDD', b'')
-    body += subrec('DNAM', zstr(""))
+    body += subrec('DNAM', zstr("Marth Requiem Overhaul: permanent bonus carry weight for you and your followers. Toggleable in the MRO MCM."))
     out.write(record('MGEF', FID_CW_MGEF, 0, body))
 
     return group('MGEF', out.getvalue())
@@ -293,7 +296,7 @@ def make_spels() -> bytes:
     # AbsorbAbility
     body  = subrec('EDID', zstr("MRO_AbsorbAbility"))
     body += subrec('OBND', bytes(12))
-    body += subrec('FULL', zstr("Elemental Absorb"))
+    body += subrec('FULL', zstr("MRO - Elemental Absorb"))
     body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
     body += subrec('DESC', zstr(""))
     body += subrec('SPIT', spit())
@@ -303,7 +306,7 @@ def make_spels() -> bytes:
     # CarryWeightAbility
     body  = subrec('EDID', zstr("MRO_CarryWeightAbility"))
     body += subrec('OBND', bytes(12))
-    body += subrec('FULL', zstr("Carry Weight Bonus"))
+    body += subrec('FULL', zstr("MRO - Carry Weight Bonus"))
     body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
     body += subrec('DESC', zstr(""))
     body += subrec('SPIT', spit())
