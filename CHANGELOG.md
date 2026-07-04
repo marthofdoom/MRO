@@ -4,6 +4,31 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.4.0 — 2026-07-04
+
+### Fixed
+- Ability spells were SPIT type 3 (Lesser Power) — absorb and carry
+  weight NEVER applied. Now type 4 (Ability) with required OBND/ETYP/DESC
+  subrecords; both show in Active Effects.
+- DR perks were rejected by the loader (trailing PRKF, hidden flags);
+  layout now byte-matches vanilla.
+- Weapon mastery XP was granted per swing, even at air/rocks. Now gated
+  on real landed hits against living hostile actors (PO3 OnWeaponHit)
+  and per-level hit costs doubled (360/220/180). Spell XP requires combat.
+
+### Added
+- MCM Tuning sliders: full-absorb resist point, 99%-DR armor rating,
+  armor/weapon mastery bonus sizes, mastery XP speed.
+- MCM Live Status: armor rating, effective physical DR%, per-element
+  resist with absorb percentage.
+- DR curve kink now read live from the load order's armor GMSTs
+  (resolves a DYNAMIC_OR_DROP item).
+- Speech as 14th mastery: barter sessions train it; 5-rung perk ladder
+  (buy up to 20% cheaper, sell up to 25% higher — Haggling entry points).
+- Smithing mastery raises temper caps (up to 2x at full mastery).
+- Absorb overflow: healing past full health spills into stamina/magicka.
+- Script v2 migration (accumulator array 13 -> 14) via update-in-place.
+
 ## v0.3.1 — 2026-07-03
 
 First fully working build.

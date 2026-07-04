@@ -26,13 +26,12 @@ FIXABLE (dynamic path identified, not yet implemented), PORTABLE (fine as-is).
 
 ## FIXABLE (make dynamic before 1.0)
 
-### Physical DR curve kink (currently hardcoded 750 armor / 75%)
-- Baked assumption: load order uses fMaxArmorRating=75 and
-  fArmorScalingFactor=0.10, so the kink sits at 750 armor.
-- Dynamic fix (easy): read both GMSTs at runtime
-  (Game.GetGameSettingFloat) each heartbeat; kink = cap / scaling,
-  slope chosen so 99% lands at kink + K armor (K configurable).
-  No generation-time knowledge needed.
+### Physical DR curve kink — RESOLVED 2026-07-04 (v0.4.0)
+- Now read live from fMaxArmorRating / fArmorScalingFactor each update;
+  the 99% point is an MCM slider (MRO_T_DR99Armor, default 2000).
+- Residual caveat: the 24 perk multipliers assume a ~75% engine cap;
+  a load order with a very different cap shifts the top end slightly.
+  Exact on any cap requires the native rewrite.
 
 ## PORTABLE (verified fine as-is)
 

@@ -60,8 +60,14 @@ FID_G_MASTERYCAP   = OWN | 0x80E
 FID_STARTUP_QUEST  = OWN | 0x80F
 FID_MCM_QUEST      = OWN | 0x810
 FID_GMST_MAXRESIST = OWN | 0x811  # fPlayerMaxResistance override
+FID_G_ABSORBMAX    = OWN | 0x812  # tuning: resist at which absorb = 100% (default 200)
+FID_G_DR99ARMOR    = OWN | 0x813  # tuning: armor rating where DR reaches 99% (default 2000)
+FID_G_ARMORMASTB   = OWN | 0x814  # tuning: armor mastery bonus at cap (default 300)
+FID_G_WEAPMASTB    = OWN | 0x815  # tuning: weapon mastery bonus %% at cap (default 50)
 FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
+FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
+FID_SP_FLST        = OWN | 0x845  # FormList holding the 5 barter perks in order
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Binary helpers
@@ -155,10 +161,10 @@ def prop_bool(v: bool) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 def make_tes4() -> bytes:
     masters = ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"]
-    hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_DR_FLST + 1)
+    hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.3.1"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.4.0"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -178,6 +184,10 @@ GLOBALS = [
     ("MRO_MasteryEnabled", FID_G_MASTERYENA,  'f', 1.0),
     ("MRO_MasteryBaseGrant",FID_G_MASTERYGNT, 'f', 1.0),
     ("MRO_MasteryCap",     FID_G_MASTERYCAP,  'f', 100.0),
+    ("MRO_T_AbsorbMax",    FID_G_ABSORBMAX,   'f', 200.0),
+    ("MRO_T_DR99Armor",    FID_G_DR99ARMOR,   'f', 2000.0),
+    ("MRO_T_ArmorMasteryBonus",  FID_G_ARMORMASTB, 'f', 300.0),
+    ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
 ]
 
 def make_globs() -> bytes:
@@ -230,7 +240,9 @@ def make_mgefs() -> bytes:
     # No properties: the script resolves resistances generically via
     # SKSE GetResistance() and PO3 archetype checks.
     vmad = VMADBuilder()
-    vmad.add_script("MRO_AbsorbMGEF", [])
+    vmad.add_script("MRO_AbsorbMGEF", [
+        ("MRO_T_AbsorbMax", prop_obj(FID_G_ABSORBMAX)),
+    ])
     body  = subrec('EDID', zstr("MRO_AbsorbMGEF"))
     body += subrec('VMAD', vmad.build())
     body += subrec('FULL', zstr("Elemental Absorb"))
@@ -334,6 +346,10 @@ def make_startup_quest() -> bytes:
         ("MRO_MasteryBaseGrant", prop_obj(FID_G_MASTERYGNT)),
         ("MRO_MasteryCap",       prop_obj(FID_G_MASTERYCAP)),
         ("MRO_DRPerks",          prop_obj(FID_DR_FLST)),
+        ("MRO_SpeechPerks",      prop_obj(FID_SP_FLST)),
+        ("MRO_T_DR99Armor",      prop_obj(FID_G_DR99ARMOR)),
+        ("MRO_T_ArmorMasteryBonus",  prop_obj(FID_G_ARMORMASTB)),
+        ("MRO_T_WeaponMasteryBonus", prop_obj(FID_G_WEAPMASTB)),
     ])
     body  = subrec('EDID', zstr("MRO_StartupQuest"))
     body += subrec('FULL', zstr("MRO Startup"))
@@ -360,6 +376,10 @@ def make_mcm_quest() -> bytes:
         ("MRO_F_CarryWeight",    prop_obj(FID_G_CARRYWEIGHT)),
         ("MRO_F_ArrowRecovery",  prop_obj(FID_G_ARROWRECOV)),
         ("MRO_F_CellReset",      prop_obj(FID_G_CELLRESET)),
+        ("MRO_T_AbsorbMax",      prop_obj(FID_G_ABSORBMAX)),
+        ("MRO_T_DR99Armor",      prop_obj(FID_G_DR99ARMOR)),
+        ("MRO_T_ArmorMasteryBonus",  prop_obj(FID_G_ARMORMASTB)),
+        ("MRO_T_WeaponMasteryBonus", prop_obj(FID_G_WEAPMASTB)),
     ])
     body  = subrec('EDID', zstr("MRO_MCMQuest"))
     body += subrec('FULL', zstr("MRO MCM"))
@@ -541,13 +561,48 @@ def make_perks() -> bytes:
         body += subrec('EPFT', bytes([1]))                 # param: float
         body += subrec('EPFD', struct.pack('<f', mult))
         out.write(record('PERK', FID_DR_PERK_BASE + i, 0, body))
+    out.write(make_speech_perks())
     return group('PERK', out.getvalue())
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Speech mastery barter ladder — entry points copied from Skyrim.esm
+# Haggling00: entry 8 = Mod Buy Prices (multiply <1), entry 60 = Mod Sell
+# Prices (multiply >1). Multi-entry perks put PRKF after each entry except
+# the last. Rung i (1..5): buy * (1 - 0.04*i), sell * (1 + 0.05*i)
+# -> at full mastery: buy 20% cheaper, sell 25% higher.
+# ──────────────────────────────────────────────────────────────────────────────
+def make_speech_perks() -> bytes:
+    out = BytesIO()
+    for i in range(5):
+        rung = i + 1
+        buy_mult  = 1.0 - 0.04 * rung
+        sell_mult = 1.0 + 0.05 * rung
+        body  = subrec('EDID', zstr("MRO_Barter%02dPerk" % rung))
+        body += subrec('DESC', zstr(""))
+        body += subrec('DATA', bytes([0, 0, 1, 1, 0]))
+        body += subrec('PRKE', bytes([2, 0, 0]))
+        body += subrec('DATA', bytes([60, 3, 2]))          # Mod Sell Prices, Multiply
+        body += subrec('EPFT', bytes([1]))
+        body += subrec('EPFD', struct.pack('<f', sell_mult))
+        body += subrec('PRKF', b'')
+        body += subrec('PRKE', bytes([2, 0, 0]))
+        body += subrec('DATA', bytes([8, 3, 2]))           # Mod Buy Prices, Multiply
+        body += subrec('EPFT', bytes([1]))
+        body += subrec('EPFD', struct.pack('<f', buy_mult))
+        out.write(record('PERK', FID_SP_PERK_BASE + i, 0, body))
+    return out.getvalue()
+
 def make_flsts() -> bytes:
+    out = BytesIO()
     body = subrec('EDID', zstr("MRO_DRPerkList"))
     for i in range(24):
         body += subrec('LNAM', struct.pack('<I', FID_DR_PERK_BASE + i))
-    return group('FLST', record('FLST', FID_DR_FLST, 0, body))
+    out.write(record('FLST', FID_DR_FLST, 0, body))
+    body = subrec('EDID', zstr("MRO_BarterPerkList"))
+    for i in range(5):
+        body += subrec('LNAM', struct.pack('<I', FID_SP_PERK_BASE + i))
+    out.write(record('FLST', FID_SP_FLST, 0, body))
+    return group('FLST', out.getvalue())
 
 def make_qusts() -> bytes:
     out = BytesIO()

@@ -7,6 +7,12 @@ Spell    Property MRO_AbsorbAbility      Auto
 Spell    Property MRO_CarryWeightAbility Auto
 Actor    Property PlayerRef              Auto
 FormList Property MRO_DRPerks            Auto  ; 24 perks, index 0 = 76% DR ... 23 = 99% DR
+FormList Property MRO_SpeechPerks        Auto  ; 5 perks, barter bonus rungs 1..5
+
+; MCM tuning globals
+GlobalVariable Property MRO_T_DR99Armor          Auto  ; armor rating for 99% DR (default 2000)
+GlobalVariable Property MRO_T_ArmorMasteryBonus  Auto  ; armor mastery bonus at cap (default 300)
+GlobalVariable Property MRO_T_WeaponMasteryBonus Auto  ; weapon mastery bonus % at cap (default 50)
 
 ; ===============================================================
 ; PROPERTIES — Feature flags (GlobalVariables set by xEdit)
@@ -43,6 +49,7 @@ String Property ID_IL  = "MRO_Mastery_Illusion"    AutoReadOnly
 String Property ID_SM  = "MRO_Mastery_Smithing"    AutoReadOnly
 String Property ID_AC  = "MRO_Mastery_Alchemy"     AutoReadOnly
 String Property ID_EN  = "MRO_Mastery_Enchanting"  AutoReadOnly
+String Property ID_SP  = "MRO_Mastery_Speech"      AutoReadOnly
 
 ; ===============================================================
 ; PERSISTENT STATE — Mastery bonus deltas currently applied
@@ -65,8 +72,13 @@ Bool   _introShown = false
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 1 AutoReadOnly
+Int Property SCRIPT_VERSION = 2 AutoReadOnly
 Int _installedVersion = 0
+
+; Smithing temper caps as read from the load order before we scale them
+Float _smithArmorBase  = 0.0
+Float _smithWeaponBase = 0.0
+Int   _speechRung      = -1
 
 ; Per-skill XP accumulators (fraction of the current level, 0-1).
 ; We own the XP curve explicitly (CSF's AdvanceSkill curve is opaque and
@@ -80,13 +92,7 @@ Event OnInit()
     ApplyGMSTFeatures()
     GiveAbilitiesTo(PlayerRef)
 
-    If MasteryEnabled()
-        RegisterForActorAction(0)
-        RegisterForActorAction(2)
-        RegisterForActorAction(6)
-        RegisterForMenu("Crafting Menu")
-        RegisterForMenu("EnchantConstructMenu")
-    EndIf
+    RegisterMasteryEvents()
 
     If !MRO_SetupDone || MRO_SetupDone.GetValueInt() == 0
         RegisterForSingleUpdate(20.0)
@@ -94,6 +100,17 @@ Event OnInit()
         RegisterForSingleUpdate(5.0)
     EndIf
 EndEvent
+
+Function RegisterMasteryEvents()
+    If MasteryEnabled()
+        RegisterForActorAction(0)   ; weapon swing: refresh equipped-weapon bonus
+        RegisterForActorAction(2)   ; spell fire: magic school XP
+        PO3_Events_Form.RegisterForWeaponHit(self)   ; real hits: weapon XP
+        RegisterForMenu("Crafting Menu")
+        RegisterForMenu("EnchantConstructMenu")
+        RegisterForMenu("BarterMenu")
+    EndIf
+EndFunction
 
 ; ===============================================================
 ; UPDATE CYCLE
@@ -122,6 +139,8 @@ Event OnUpdate()
         UpdateArmorMasteryBonuses()
         UpdateMagicMasteryBonuses()
         UpdateCraftingMasteryBonuses()
+        UpdateSpeechMasteryBonus()
+        ApplySmithingMastery()
         If PlayerRef.IsInCombat()
             GrantCombatArmorXP()
         EndIf
@@ -138,15 +157,15 @@ EndEvent
 ; ===============================================================
 Function RunUpgrade(Int fromVersion)
     ; Mastery XP accumulators: create or migrate if the skill count
-    ; ever changes between versions.
+    ; ever changes between versions (v2: 13 -> 14, Speech added).
     If !_mxp
-        _mxp = new Float[13]
-    ElseIf _mxp.Length != 13
-        Float[] fresh = new Float[13]
+        _mxp = new Float[14]
+    ElseIf _mxp.Length != 14
+        Float[] fresh = new Float[14]
         Int i = 0
         Int copyMax = _mxp.Length
-        If copyMax > 13
-            copyMax = 13
+        If copyMax > 14
+            copyMax = 14
         EndIf
         While i < copyMax
             fresh[i] = _mxp[i]
@@ -161,13 +180,7 @@ Function RunUpgrade(Int fromVersion)
     GiveAbilitiesTo(PlayerRef)
     RefreshAbilities()
     RefreshFollowerAbilities()
-    If MasteryEnabled()
-        RegisterForActorAction(0)
-        RegisterForActorAction(2)
-        RegisterForActorAction(6)
-        RegisterForMenu("Crafting Menu")
-        RegisterForMenu("EnchantConstructMenu")
-    EndIf
+    RegisterMasteryEvents()
 
     ; Only announce true mid-playthrough upgrades, and only when the
     ; intro already ran (a fresh install announces via the intro).
@@ -244,11 +257,15 @@ Function RefreshAbilities()
 EndFunction
 
 ; ===============================================================
-; PHYSICAL DR ABOVE THE ENGINE'S 75% ARMOR CAP
-; The engine caps armor DR at 75% (750 armor at Requiem's 0.10/pt).
-; Above that, a hidden Mod Incoming Damage perk supplies the rest:
-;   DR% = 75 + (armor - 750) * 0.0192, capped at 99% (~2000 armor)
-; Below 750 armor nothing changes; enemies never get these perks.
+; PHYSICAL DR ABOVE THE ENGINE'S ARMOR CAP
+; The engine's own cap and slope are read live from the GMSTs, so
+; the kink adapts to any load order (Requiem/LoreRim: 75% at 750).
+; Above the kink a hidden Mod Incoming Damage perk supplies:
+;   DR% = cap + (armor - kink) * (99 - cap) / (DR99Armor - kink)
+; where DR99Armor is the MCM slider (default 2000). The perk
+; multipliers assume a 75% engine cap; a load order with a very
+; different cap shifts the effective top end slightly.
+; Below the kink nothing changes; enemies never get these perks.
 ; ===============================================================
 Function UpdateArmorDRFor(Actor akActor)
     If !akActor || !MRO_DRPerks
@@ -256,9 +273,25 @@ Function UpdateArmorDRFor(Actor akActor)
     EndIf
     Int want = -1
     If FeatureEnabled(MRO_F_ArmorCap)
+        Float capPct  = Game.GetGameSettingFloat("fMaxArmorRating")
+        Float scaling = Game.GetGameSettingFloat("fArmorScalingFactor")
+        If capPct < 20.0 || capPct > 95.0
+            capPct = 75.0
+        EndIf
+        If scaling <= 0.0
+            scaling = 0.1
+        EndIf
+        Float kink = capPct / scaling
+        Float target = 2000.0
+        If MRO_T_DR99Armor
+            target = MRO_T_DR99Armor.GetValue()
+        EndIf
+        If target <= kink + 100.0
+            target = kink + 100.0
+        EndIf
         Float ar = akActor.GetActorValue("DamageResist")
-        If ar > 750.0
-            Int d = (75.0 + (ar - 750.0) * 0.0192) as Int
+        If ar > kink
+            Int d = (capPct + (ar - kink) * (99.0 - capPct) / (target - kink)) as Int
             If d > 99
                 d = 99
             EndIf
@@ -317,38 +350,52 @@ Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
     If akActor != PlayerRef
         Return
     EndIf
-    ; Combat-skill XP only accrues in combat — swinging at rocks or air
-    ; grants nothing.
-    If !PlayerRef.IsInCombat()
-        Return
-    EndIf
     If actionType == 0
+        ; Swings only refresh the equipped-weapon bonus on quick swaps;
+        ; weapon XP comes exclusively from OnWeaponHit (real hits).
         Weapon w = akSource as Weapon
-        If !w
-            Return
-        EndIf
-        String wSkill = GetWeaponSkill(w)
-        If wSkill == "OH" && PlayerRef.GetBaseActorValue("OneHanded") >= 100.0
-            GrantMasteryXP(ID_OH, CustomSkills.GetSkillLevel(ID_OH))
-        ElseIf wSkill == "TH" && PlayerRef.GetBaseActorValue("TwoHanded") >= 100.0
-            GrantMasteryXP(ID_TH, CustomSkills.GetSkillLevel(ID_TH))
-        EndIf
-        If wSkill != _activeWeaponSkill
+        If w && GetWeaponSkill(w) != _activeWeaponSkill
             UpdateWeaponMasteryBonus()
         EndIf
         Return
     EndIf
     If actionType == 2
+        ; Spell XP requires combat — casting at walls trains nothing.
+        If !PlayerRef.IsInCombat()
+            Return
+        EndIf
         Spell sp = akSource as Spell
         If sp
             GrantSpellMasteryXP(sp)
         EndIf
+    EndIf
+EndEvent
+
+; ===============================================================
+; WEAPON HITS (PO3) — the damage gate for weapon mastery XP.
+; Fires only when the player actually lands a weapon hit; XP only
+; for living, hostile actor targets, so furniture, training dummies,
+; followers, and air swings never count.
+; ===============================================================
+Event OnWeaponHit(ObjectReference akTarget, Form akSource, Projectile akProjectile, Int aiHitFlagMask)
+    If !MasteryEnabled()
         Return
     EndIf
-    If actionType == 6
-        If PlayerRef.GetBaseActorValue("Marksman") >= 100.0
-            GrantMasteryXP(ID_MK, CustomSkills.GetSkillLevel(ID_MK))
-        EndIf
+    Actor victim = akTarget as Actor
+    If !victim || victim.IsDead() || !victim.IsHostileToActor(PlayerRef)
+        Return
+    EndIf
+    Weapon w = akSource as Weapon
+    If !w
+        Return
+    EndIf
+    String wSkill = GetWeaponSkill(w)
+    If wSkill == "OH" && PlayerRef.GetBaseActorValue("OneHanded") >= 100.0
+        GrantMasteryXP(ID_OH, CustomSkills.GetSkillLevel(ID_OH))
+    ElseIf wSkill == "TH" && PlayerRef.GetBaseActorValue("TwoHanded") >= 100.0
+        GrantMasteryXP(ID_TH, CustomSkills.GetSkillLevel(ID_TH))
+    ElseIf wSkill == "MK" && PlayerRef.GetBaseActorValue("Marksman") >= 100.0
+        GrantMasteryXP(ID_MK, CustomSkills.GetSkillLevel(ID_MK))
     EndIf
 EndEvent
 
@@ -366,6 +413,10 @@ Event OnMenuClose(String asMenuName)
     ElseIf asMenuName == "EnchantConstructMenu"
         If PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
             GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN))
+        EndIf
+    ElseIf asMenuName == "BarterMenu"
+        If PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
+            GrantMasteryXP(ID_SP, CustomSkills.GetSkillLevel(ID_SP))
         EndIf
     EndIf
 EndEvent
@@ -395,7 +446,7 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
         Return
     EndIf
     If !_mxp
-        _mxp = new Float[13]
+        _mxp = new Float[14]
     EndIf
     Float baseGrant = 1.0
     If MRO_MasteryBaseGrant
@@ -421,11 +472,11 @@ EndFunction
 ;   Alch  ~110/potion, ~5/session         Ench  900/item, ~2/session
 Float Function ActionsAtZero(Int idx)
     If idx == 0
-        Return 180.0    ; OneHanded swings
+        Return 360.0    ; OneHanded landed hits (2x vanilla-derived rate)
     ElseIf idx == 1
-        Return 110.0    ; TwoHanded swings
+        Return 220.0    ; TwoHanded landed hits
     ElseIf idx == 2
-        Return 90.0     ; Marksman shots
+        Return 180.0    ; Marksman landed shots
     ElseIf idx <= 4
         Return 45.0     ; Light/Heavy Armor 30s combat ticks
     ElseIf idx == 5
@@ -442,8 +493,10 @@ Float Function ActionsAtZero(Int idx)
         Return 4.0      ; Smithing sessions (vanilla's fastest skill)
     ElseIf idx == 11
         Return 23.0     ; Alchemy sessions
+    ElseIf idx == 12
+        Return 5.0      ; Enchanting sessions
     EndIf
-    Return 5.0          ; Enchanting sessions
+    Return 20.0         ; Speech: barter sessions
 EndFunction
 
 Int Function SkillIndex(String skillId)
@@ -473,8 +526,44 @@ Int Function SkillIndex(String skillId)
         Return 11
     ElseIf skillId == ID_EN
         Return 12
+    ElseIf skillId == ID_SP
+        Return 13
     EndIf
     Return -1
+EndFunction
+
+; Effective physical DR% for the player right now, including the perk
+; ladder above the engine cap. Used by the MCM live-status readout.
+Float Function GetCurrentDRPct()
+    Float capPct  = Game.GetGameSettingFloat("fMaxArmorRating")
+    Float scaling = Game.GetGameSettingFloat("fArmorScalingFactor")
+    If capPct < 20.0 || capPct > 95.0
+        capPct = 75.0
+    EndIf
+    If scaling <= 0.0
+        scaling = 0.1
+    EndIf
+    Float ar = PlayerRef.GetActorValue("DamageResist")
+    Float d = ar * scaling
+    If d < capPct || !FeatureEnabled(MRO_F_ArmorCap)
+        If d > capPct
+            Return capPct
+        EndIf
+        Return d
+    EndIf
+    Float kink = capPct / scaling
+    Float target = 2000.0
+    If MRO_T_DR99Armor
+        target = MRO_T_DR99Armor.GetValue()
+    EndIf
+    If target <= kink + 100.0
+        target = kink + 100.0
+    EndIf
+    d = capPct + (ar - kink) * (99.0 - capPct) / (target - kink)
+    If d > 99.0
+        Return 99.0
+    EndIf
+    Return d
 EndFunction
 
 ; Progress within the current mastery level, 0-100.
@@ -534,14 +623,18 @@ Function UpdateWeaponMasteryBonus()
     If !w
         Return
     EndIf
+    Float maxBonus = 0.5
+    If MRO_T_WeaponMasteryBonus
+        maxBonus = MRO_T_WeaponMasteryBonus.GetValue() / 100.0
+    EndIf
     String wSkill = GetWeaponSkill(w)
     Float newBonus = 0.0
     If wSkill == "OH"
-        newBonus = GetMasteryFraction(ID_OH) * 0.5
+        newBonus = GetMasteryFraction(ID_OH) * maxBonus
     ElseIf wSkill == "TH"
-        newBonus = GetMasteryFraction(ID_TH) * 0.5
+        newBonus = GetMasteryFraction(ID_TH) * maxBonus
     ElseIf wSkill == "MK"
-        newBonus = GetMasteryFraction(ID_MK) * 0.5
+        newBonus = GetMasteryFraction(ID_MK) * maxBonus
     Else
         Return
     EndIf
@@ -557,9 +650,13 @@ EndFunction
 ; mastery bonus, no chest (or clothing) = neither.
 Function UpdateArmorMasteryBonuses()
     Int wornClass = WornChestWeightClass()
+    Float maxBonus = 300.0
+    If MRO_T_ArmorMasteryBonus
+        maxBonus = MRO_T_ArmorMasteryBonus.GetValue()
+    EndIf
     Float newLA = 0.0
     If wornClass == 0
-        newLA = GetMasteryFraction(ID_LA) * 300.0
+        newLA = GetMasteryFraction(ID_LA) * maxBonus
     EndIf
     Float deltaLA = newLA - _bonusLA
     If deltaLA != 0.0
@@ -568,7 +665,7 @@ Function UpdateArmorMasteryBonuses()
     EndIf
     Float newHA = 0.0
     If wornClass == 1
-        newHA = GetMasteryFraction(ID_HA) * 300.0
+        newHA = GetMasteryFraction(ID_HA) * maxBonus
     EndIf
     Float deltaHA = newHA - _bonusHA
     If deltaHA != 0.0
@@ -642,6 +739,53 @@ Function UpdateCraftingMasteryBonuses()
         PlayerRef.ModActorValue("EnchantingMod", deltaEN)
         _bonusEN = newEN
     EndIf
+EndFunction
+
+; Speech mastery: barter price perk ladder (5 rungs; at cap buy 20%
+; cheaper, sell 25% higher). Same swap pattern as the DR ladder.
+Function UpdateSpeechMasteryBonus()
+    If !MRO_SpeechPerks
+        Return
+    EndIf
+    Int want = ((GetMasteryFraction(ID_SP) * 5.0) as Int) - 1
+    If GetMasteryFraction(ID_SP) >= 1.0
+        want = 4
+    EndIf
+    If want == _speechRung
+        Return
+    EndIf
+    Int i = 0
+    While i < 5
+        Perk p = MRO_SpeechPerks.GetAt(i) as Perk
+        If p
+            If i == want
+                If !PlayerRef.HasPerk(p)
+                    PlayerRef.AddPerk(p)
+                EndIf
+            ElseIf PlayerRef.HasPerk(p)
+                PlayerRef.RemovePerk(p)
+            EndIf
+        EndIf
+        i += 1
+    EndWhile
+    _speechRung = want
+EndFunction
+
+; Smithing mastery raises the temper caps. The load-order base values
+; are captured on first read (before we ever write) and scaled up to
+; double at full mastery. GMSTs are global but NPCs don't temper, so
+; this is effectively player-only.
+Function ApplySmithingMastery()
+    If _smithArmorBase <= 0.0
+        _smithArmorBase  = Game.GetGameSettingFloat("fSmithingArmorMax")
+        _smithWeaponBase = Game.GetGameSettingFloat("fSmithingWeaponMax")
+        If _smithArmorBase <= 0.0
+            Return
+        EndIf
+    EndIf
+    Float frac = GetMasteryFraction(ID_SM)
+    Game.SetGameSettingFloat("fSmithingArmorMax",  _smithArmorBase  * (1.0 + frac))
+    Game.SetGameSettingFloat("fSmithingWeaponMax", _smithWeaponBase * (1.0 + frac))
 EndFunction
 
 Function GrantCombatArmorXP()

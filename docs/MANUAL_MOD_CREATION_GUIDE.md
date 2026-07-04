@@ -103,11 +103,19 @@ A scripted constant/self MGEF + VMAD = "run this ActiveMagicEffect script
 while the ability is on the actor" (OnHit handlers etc.).
 
 ### SPEL (ability)
-`EDID`, `FULL`, `SPIT` (36 bytes: cost f32, flags u32, type u32=3 Ability,
-chargeTime f32, castType u32=0 Constant, delivery u32=0 Self, castDuration,
-range, perk u32=0), then per effect: `EFID` (MGEF formID) + `EFIT`
-(magnitude f32, area u32, duration u32). Add to actors with
-`Actor.AddSpell(spell, false)`.
+Required subrecords, in order (verified against Skyrim.esm
+AbAlduinInvulnerability): `EDID`, `OBND` (12 zero bytes), `FULL`, `ETYP`
+(equip type u32, vanilla abilities use 0x00013F44), `DESC` (empty zstring
+in non-localized plugins), `SPIT` (36 bytes: cost f32, flags u32,
+**type u32=4 Ability** — type 3 is Lesser Power and NEVER applies as a
+constant effect; this one-value error made two "abilities" silently do
+nothing for days —, chargeTime f32, castType u32=0 Constant, delivery
+u32=0 Self, castDuration, range, perk u32=0), then per effect: `EFID`
+(MGEF formID) + `EFIT` (magnitude f32, area u32, duration u32).
+Add to actors with `Actor.AddSpell(spell, false)`. Verify in-game via the
+Active Effects UI — a constant self ability with a FULL name shows there.
+MGEF companions need `SNDD` (empty) and `DNAM` (empty zstring) after DATA,
+and VMAD goes immediately after EDID.
 
 ### PERK with an entry point (e.g. damage multiplier)
 Copied byte-for-byte from Skyrim.esm `DragonhideSpellPerk` (80% physical
@@ -120,11 +128,20 @@ EPFT(1)=[1]                # param type float
 EPFD(4)=f32 multiplier     # e.g. 0.2 = take 20% damage
 PRKF(0)                    # end of effect
 ```
-Entry point 36 affects physical/weapon hits only. Perks are per-actor
-(AddPerk/RemovePerk) — the way to give player/follower-only passive effects.
-For a dynamic value, generate a ladder of perks with static values and swap
-them from script (AV-driven entry point functions exist but we found no
-vanilla example to copy the layout from — don't guess).
+Entry point 36 affects physical/weapon hits only. Other verified entry
+points (from Skyrim.esm Haggling00): **8 = Mod Buy Prices** (multiply <1 =
+cheaper) and **60 = Mod Sell Prices** (multiply >1 = higher). Perks are
+per-actor (AddPerk/RemovePerk) — the way to give player/follower-only
+passive effects. For a dynamic value, generate a ladder of perks with
+static values and swap them from script (AV-driven entry point functions
+exist but we found no vanilla example to copy the layout from — don't guess).
+
+PERK gotchas that made the loader silently reject records:
+- NO trailing `PRKF` after the FINAL entry (multi-entry perks put PRKF
+  between entries only — both Dragonhide and crFalmerPoison05 confirm).
+- DATA(5) = [trait=0, level=0, numRanks=1, playable=1, hidden=0]; our
+  hidden/unplayable variant did not load.
+- Conditions (PRKC/CTDA) are optional; unconditioned entries work.
 
 ### FLST (form list)
 `EDID` + one `LNAM` (u32 formID) per entry. One VMAD Object property hands a
@@ -193,6 +210,20 @@ BSA etc. at runtime, and Papyrus links by name at load.
   aliases needed), `GetEffectArchetypeAsString(mgef)`,
   `GetPrimaryActorValue(mgef)` — filter real damage effects from riders
   (frost Slow shares FrostResist with frost damage; archetype tells them apart).
+- PO3 player events (`PO3_Events_Form`, register any form incl. quests):
+  `RegisterForWeaponHit` → `OnWeaponHit(target, source, projectile, flags)`
+  fires on the player's actual landed weapon hits (melee AND arrows) — the
+  correct gate for "hit an enemy" logic; swing-detection via
+  `RegisterForActorAction(0)` fires on air swings too. Also `OnMagicHit`,
+  `OnItemCrafted`, `OnActorKilled`, `OnSkillIncrease`, etc.
+  Note `RegisterForHitEventEx` is for hits ON the registered reference —
+  not for the player's outgoing hits.
+- No max-actor-value getter in Papyrus: derive it via vanilla
+  `GetActorValuePercentage(av)` → max = current / pct (guard pct <= 0).
+  Needed for overheal/overflow logic.
+- Reading a GMST you also write: capture the base value BEFORE the first
+  write and keep it in a script variable (saved), or you ratchet your own
+  output (e.g. scaling fSmithingArmorMax by mastery each cycle).
 - Papyrus string comparison is case-insensitive. `\` continues a line.
 - A quest script + `RegisterForSingleUpdate(30.0)` heartbeat re-applying
   GMSTs beats any mod that sets them at startup, since you re-win every cycle.

@@ -15,6 +15,10 @@ GlobalVariable  Property MRO_F_Absorb           Auto
 GlobalVariable  Property MRO_F_CarryWeight      Auto
 GlobalVariable  Property MRO_F_ArrowRecovery    Auto
 GlobalVariable  Property MRO_F_CellReset        Auto
+GlobalVariable  Property MRO_T_AbsorbMax        Auto
+GlobalVariable  Property MRO_T_DR99Armor        Auto
+GlobalVariable  Property MRO_T_ArmorMasteryBonus  Auto
+GlobalVariable  Property MRO_T_WeaponMasteryBonus Auto
 
 ; Toggle option IDs
 Int _oidResistCap   = -1
@@ -28,6 +32,11 @@ Int _oidVendorGold  = -1
 
 ; Slider option IDs
 Int _oidMasteryCap  = -1
+Int _oidAbsorbMax   = -1
+Int _oidDR99Armor   = -1
+Int _oidArmorMastB  = -1
+Int _oidWeapMastB   = -1
+Int _oidXPSpeed     = -1
 
 ; Boss readiness rows (for highlight info)
 Int _oidDrain       = -1
@@ -117,23 +126,51 @@ EndEvent
 
 Event OnOptionSliderOpen(Int a_option)
     If a_option == _oidMasteryCap
-        Float curCap = 100.0
-        If MRO_MasteryCap
-            curCap = MRO_MasteryCap.GetValue()
-        EndIf
-        SetSliderDialogStartValue(curCap)
-        SetSliderDialogDefaultValue(100.0)
-        SetSliderDialogRange(50.0, 200.0)
-        SetSliderDialogInterval(10.0)
+        SliderSetup(MRO_MasteryCap, 100.0, 50.0, 200.0, 10.0)
+    ElseIf a_option == _oidAbsorbMax
+        SliderSetup(MRO_T_AbsorbMax, 200.0, 125.0, 400.0, 25.0)
+    ElseIf a_option == _oidDR99Armor
+        SliderSetup(MRO_T_DR99Armor, 2000.0, 1000.0, 4000.0, 100.0)
+    ElseIf a_option == _oidArmorMastB
+        SliderSetup(MRO_T_ArmorMasteryBonus, 300.0, 0.0, 600.0, 25.0)
+    ElseIf a_option == _oidWeapMastB
+        SliderSetup(MRO_T_WeaponMasteryBonus, 50.0, 0.0, 100.0, 5.0)
+    ElseIf a_option == _oidXPSpeed
+        SliderSetup(MRO_MasteryBaseGrant, 1.0, 0.25, 4.0, 0.25)
     EndIf
 EndEvent
 
+Function SliderSetup(GlobalVariable gv, Float def, Float minV, Float maxV, Float step)
+    Float cur = def
+    If gv
+        cur = gv.GetValue()
+    EndIf
+    SetSliderDialogStartValue(cur)
+    SetSliderDialogDefaultValue(def)
+    SetSliderDialogRange(minV, maxV)
+    SetSliderDialogInterval(step)
+EndFunction
+
 Event OnOptionSliderAccept(Int a_option, Float a_value)
+    GlobalVariable gv = None
+    String fmt = "{0}"
     If a_option == _oidMasteryCap
-        If MRO_MasteryCap
-            MRO_MasteryCap.SetValue(a_value)
-        EndIf
-        SetSliderOptionValue(_oidMasteryCap, a_value, "{0}")
+        gv = MRO_MasteryCap
+    ElseIf a_option == _oidAbsorbMax
+        gv = MRO_T_AbsorbMax
+    ElseIf a_option == _oidDR99Armor
+        gv = MRO_T_DR99Armor
+    ElseIf a_option == _oidArmorMastB
+        gv = MRO_T_ArmorMasteryBonus
+    ElseIf a_option == _oidWeapMastB
+        gv = MRO_T_WeaponMasteryBonus
+    ElseIf a_option == _oidXPSpeed
+        gv = MRO_MasteryBaseGrant
+        fmt = "{2}"
+    EndIf
+    If gv
+        gv.SetValue(a_value)
+        SetSliderOptionValue(a_option, a_value, fmt)
     EndIf
 EndEvent
 
@@ -159,7 +196,17 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidVendorGold
         SetInfoText("All 13 vendor gold pools doubled from your load order's values. Baked into MRO.esp - reinstall to change.")
     ElseIf a_option == _oidMasteryCap
-        SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost follows the vanilla skill curve extended past 100: mastery n prices like skill level 100+n, so level 200 costs 9x level 1. Discipline-specific actions (swings, casts, combat time, craft sessions).")
+        SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost follows the vanilla skill curve extended past 100: mastery n prices like skill level 100+n, so level 200 costs 9x level 1. Discipline-specific actions (landed hits, casts, combat time, sessions).")
+    ElseIf a_option == _oidAbsorbMax
+        SetInfoText("Resistance at which elemental absorb heals 100% of damage. Lower = absorb builds come online faster.")
+    ElseIf a_option == _oidDR99Armor
+        SetInfoText("Armor rating needed to reach 99% physical DR. The curve starts at the engine cap (read live from your load order) and scales linearly to this point.")
+    ElseIf a_option == _oidArmorMastB
+        SetInfoText("Armor rating granted by a fully-leveled armor mastery while wearing a matching chest piece.")
+    ElseIf a_option == _oidWeapMastB
+        SetInfoText("Attack damage bonus (percent) granted by a fully-leveled weapon mastery.")
+    ElseIf a_option == _oidXPSpeed
+        SetInfoText("Global mastery XP speed multiplier. 2 = levels twice as fast, 0.5 = half speed.")
     ElseIf a_option == _oidDrain
         SetInfoText("Alduin's Drain Vitality is UNRESISTABLE and drains ~25 HP per pulse. Raw HP is the only defense - resistances do not help.")
     ElseIf a_option == _oidAldP1
@@ -292,6 +339,10 @@ Function RenderMastery()
         RenderSkillRow(q, "Smithing",    q.ID_SM)
         RenderSkillRow(q, "Alchemy",     q.ID_AC)
         RenderSkillRow(q, "Enchanting",  q.ID_EN)
+        AddEmptyOption()
+
+        AddHeaderOption("Commerce")
+        RenderSkillRow(q, "Speech",      q.ID_SP)
     EndIf
 EndFunction
 
@@ -336,8 +387,53 @@ Function RenderFeatures()
     _oidMastery = AddToggleOption("Skill Mastery System", q.FeatureEnabled(MRO_MasteryEnabled))
     AddEmptyOption()
 
+    AddHeaderOption("Tuning")
+    _oidAbsorbMax  = AddSliderOption("Full Absorb At Resist", SliderVal(MRO_T_AbsorbMax, 200.0), "{0}%")
+    _oidDR99Armor  = AddSliderOption("99% DR At Armor",       SliderVal(MRO_T_DR99Armor, 2000.0), "{0}")
+    _oidArmorMastB = AddSliderOption("Armor Mastery Bonus",   SliderVal(MRO_T_ArmorMasteryBonus, 300.0), "{0}")
+    _oidWeapMastB  = AddSliderOption("Weapon Mastery Bonus",  SliderVal(MRO_T_WeaponMasteryBonus, 50.0), "{0}%")
+    _oidXPSpeed    = AddSliderOption("Mastery XP Speed",      SliderVal(MRO_MasteryBaseGrant, 1.0), "{2}")
+    AddEmptyOption()
+
+    AddHeaderOption("Live Status")
+    Actor player = Game.GetPlayer()
+    Float dr = q.GetCurrentDRPct()
+    AddTextOption("Armor Rating", (player.GetActorValue("DamageResist") as Int) as String)
+    AddTextOption("Physical DR",  ((dr as Int) as String) + "%")
+    AddTextOption("Fire",   ResistStatus(player, "FireResist"))
+    AddTextOption("Frost",  ResistStatus(player, "FrostResist"))
+    AddTextOption("Shock",  ResistStatus(player, "ElectricResist"))
+    AddTextOption("Magic",  ResistStatus(player, "MagicResist"))
+    AddTextOption("Poison", ResistStatus(player, "PoisonResist"))
+    AddEmptyOption()
+
     AddHeaderOption("Baked Into ESP")
     _oidVendorGold = AddTextOption("Vendor Gold", "Doubled")
+EndFunction
+
+Float Function SliderVal(GlobalVariable gv, Float def)
+    If gv
+        Return gv.GetValue()
+    EndIf
+    Return def
+EndFunction
+
+; "62%" below absorb range, "150% (absorbs 50%)" above it
+String Function ResistStatus(Actor player, String av)
+    Int r = player.GetActorValue(av) as Int
+    String s = (r as String) + "%"
+    If r > 100
+        Float fullAt = SliderVal(MRO_T_AbsorbMax, 200.0)
+        If fullAt <= 100.0
+            fullAt = 200.0
+        EndIf
+        Float frac = ((r as Float) - 100.0) / (fullAt - 100.0)
+        If frac > 1.0
+            frac = 1.0
+        EndIf
+        s += " (absorbs " + ((frac * 100.0) as Int) + "%)"
+    EndIf
+    Return s
 EndFunction
 
 ; ==========================================================

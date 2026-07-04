@@ -1,5 +1,8 @@
 Scriptname MRO_AbsorbMGEF extends ActiveMagicEffect
 
+; Resist value at which absorb reaches 100% of damage (MCM slider, default 200)
+GlobalVariable Property MRO_T_AbsorbMax Auto
+
 ; OnHit fires automatically for the target actor - no registration needed.
 ;
 ; Covers three damage sources:
@@ -46,7 +49,23 @@ Event OnHit(ObjectReference akAggressor, Form akSource, Projectile akProjectile,
     EndIf
 
     If healAmount > 0.0
+        ; Overflow: healing past full health spills into stamina and
+        ; magicka. Missing health from GetActorValuePercentage (vanilla
+        ; API: current/max), since Papyrus has no max-AV getter.
+        Float pct = hitTarget.GetActorValuePercentage("Health")
+        Float overflow = 0.0
+        If pct > 0.0
+            Float cur = hitTarget.GetActorValue("Health")
+            Float missing = (cur / pct) - cur
+            If healAmount > missing
+                overflow = healAmount - missing
+            EndIf
+        EndIf
         hitTarget.RestoreActorValue("Health", healAmount)
+        If overflow > 0.0
+            hitTarget.RestoreActorValue("Stamina", overflow * 0.5)
+            hitTarget.RestoreActorValue("Magicka", overflow * 0.5)
+        EndIf
     EndIf
 EndEvent
 
@@ -75,7 +94,15 @@ Float Function EffectHeal(Actor akTarget, MagicEffect akEffect, Float afMagnitud
         Return 0.0
     EndIf
 
-    Float fraction = (resistance - 100.0) / 100.0
+    ; Full absorb at MRO_T_AbsorbMax resist (default 200)
+    Float fullAt = 200.0
+    If MRO_T_AbsorbMax
+        fullAt = MRO_T_AbsorbMax.GetValue()
+    EndIf
+    If fullAt <= 100.0
+        fullAt = 200.0
+    EndIf
+    Float fraction = (resistance - 100.0) / (fullAt - 100.0)
     If fraction > 1.0
         fraction = 1.0
     EndIf

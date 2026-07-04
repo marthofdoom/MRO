@@ -135,6 +135,7 @@ Mastery cap is adjustable in the MCM (50-200; default 100). Higher caps mean a l
                 <file source="SKSE/Plugins/CustomSkills/MRO_Mastery_OneHanded.json" destination="SKSE/Plugins/CustomSkills/MRO_Mastery_OneHanded.json"/>
                 <file source="SKSE/Plugins/CustomSkills/MRO_Mastery_Restoration.json" destination="SKSE/Plugins/CustomSkills/MRO_Mastery_Restoration.json"/>
                 <file source="SKSE/Plugins/CustomSkills/MRO_Mastery_Smithing.json" destination="SKSE/Plugins/CustomSkills/MRO_Mastery_Smithing.json"/>
+                <file source="SKSE/Plugins/CustomSkills/MRO_Mastery_Speech.json" destination="SKSE/Plugins/CustomSkills/MRO_Mastery_Speech.json"/>
                 <file source="SKSE/Plugins/CustomSkills/MRO_Mastery_TwoHanded.json" destination="SKSE/Plugins/CustomSkills/MRO_Mastery_TwoHanded.json"/>
               </files>
               <typeDescriptor><type name="Recommended"/></typeDescriptor>
