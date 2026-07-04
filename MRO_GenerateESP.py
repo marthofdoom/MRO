@@ -222,21 +222,29 @@ AV_CARRYWEIGHT = 32  # kCarryWeight in Skyrim actor value enum
 def make_mgefs() -> bytes:
     out = BytesIO()
 
+    # Subrecord order and required subrecords (SNDD, DNAM) verified against
+    # Skyrim.esm AbAlduinInvulnerabilityEffect: EDID, VMAD, FULL, DATA,
+    # SNDD (empty), DNAM (zero description lstring).
+
     # ── AbsorbMGEF: scripted, OnHit handler, no AV change ──
     # No properties: the script resolves resistances generically via
     # SKSE GetResistance() and PO3 archetype checks.
     vmad = VMADBuilder()
     vmad.add_script("MRO_AbsorbMGEF", [])
     body  = subrec('EDID', zstr("MRO_AbsorbMGEF"))
-    body += subrec('FULL', zstr("Elemental Absorb"))
     body += subrec('VMAD', vmad.build())
+    body += subrec('FULL', zstr("Elemental Absorb"))
     body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF))
+    body += subrec('SNDD', b'')
+    body += subrec('DNAM', zstr(""))
     out.write(record('MGEF', FID_ABSORB_MGEF, 0, body))
 
     # ── CarryWeightMGEF: value modifier on CarryWeight, +150 ──
     body  = subrec('EDID', zstr("MRO_CarryWeightMGEF"))
     body += subrec('FULL', zstr("Carry Weight Bonus"))
     body += subrec('DATA', mgef_data(effect_type=0, primary_av=AV_CARRYWEIGHT))
+    body += subrec('SNDD', b'')
+    body += subrec('DNAM', zstr(""))
     out.write(record('MGEF', FID_CW_MGEF, 0, body))
 
     return group('MGEF', out.getvalue())
@@ -244,9 +252,14 @@ def make_mgefs() -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 # SPEL — Spell (Ability type)
 # SPIT: (cost:f)(flags:I)(type:I)(chargeTime:f)(castType:I)(delivery:I)(castDuration:f)(range:f)(perk:I)
-# type 3 = Ability, castType 0 = Constant Effect, delivery 0 = Self
+# type 4 = Ability (verified against Skyrim.esm AbAlduinInvulnerability —
+# type 3 is Lesser Power, which never applies as a constant effect and was
+# why absorb/carry weight silently did nothing). castType 0 = Constant,
+# delivery 0 = Self. OBND/ETYP/DESC are required subrecords.
 # ──────────────────────────────────────────────────────────────────────────────
-def spit(spell_type=3, cast_type=0, delivery=0, cost=0.0, flags=0x00000000) -> bytes:
+FREF_ETYP_EITHERHAND = 0x00013F44  # Skyrim.esm equip type used by vanilla abilities
+
+def spit(spell_type=4, cast_type=0, delivery=0, cost=0.0, flags=0x00000000) -> bytes:
     return (struct.pack('<f', cost)
             + struct.pack('<I', flags)
             + struct.pack('<I', spell_type)
@@ -267,14 +280,20 @@ def make_spels() -> bytes:
 
     # AbsorbAbility
     body  = subrec('EDID', zstr("MRO_AbsorbAbility"))
+    body += subrec('OBND', bytes(12))
     body += subrec('FULL', zstr("Elemental Absorb"))
+    body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
+    body += subrec('DESC', zstr(""))
     body += subrec('SPIT', spit())
     body += spell_effect(FID_ABSORB_MGEF, 1.0)
     out.write(record('SPEL', FID_ABSORB_SPELL, 0, body))
 
     # CarryWeightAbility
     body  = subrec('EDID', zstr("MRO_CarryWeightAbility"))
+    body += subrec('OBND', bytes(12))
     body += subrec('FULL', zstr("Carry Weight Bonus"))
+    body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
+    body += subrec('DESC', zstr(""))
     body += subrec('SPIT', spit())
     body += spell_effect(FID_CW_MGEF, 150.0)
     out.write(record('SPEL', FID_CW_SPELL, 0, body))
@@ -511,14 +530,16 @@ def make_perks() -> bytes:
     for i in range(24):
         d = 76 + i
         mult = (100.0 - d) / 25.0
+        # Layout matches Skyrim.esm crFalmerPoison05 exactly: playable=1,
+        # hidden=0, and NO trailing PRKF after the final entry (vanilla
+        # omits it; a trailing PRKF makes the loader reject the record).
         body  = subrec('EDID', zstr("MRO_DR%02dPerk" % d))
-        body += subrec('DESC', b'\x00')
-        body += subrec('DATA', bytes([0, 0, 1, 0, 1]))   # trait0 lvl0 ranks1 unplayable hidden
+        body += subrec('DESC', zstr(""))
+        body += subrec('DATA', bytes([0, 0, 1, 1, 0]))   # trait0 lvl0 ranks1 playable notHidden
         body += subrec('PRKE', bytes([2, 0, 0]))          # type 2 = entry point
         body += subrec('DATA', bytes([36, 3, 3]))         # Mod Incoming Damage, Multiply Value
         body += subrec('EPFT', bytes([1]))                 # param: float
         body += subrec('EPFD', struct.pack('<f', mult))
-        body += subrec('PRKF', b'')
         out.write(record('PERK', FID_DR_PERK_BASE + i, 0, body))
     return group('PERK', out.getvalue())
 

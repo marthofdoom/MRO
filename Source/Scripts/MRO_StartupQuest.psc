@@ -317,6 +317,11 @@ Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
     If akActor != PlayerRef
         Return
     EndIf
+    ; Combat-skill XP only accrues in combat — swinging at rocks or air
+    ; grants nothing.
+    If !PlayerRef.IsInCombat()
+        Return
+    EndIf
     If actionType == 0
         Weapon w = akSource as Weapon
         If !w
