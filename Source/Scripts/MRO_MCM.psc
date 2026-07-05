@@ -3,7 +3,7 @@ Scriptname MRO_MCM extends SKI_ConfigBase
 Quest           Property MRO_Quest              Auto
 
 ; Stamped by release.sh — do not edit by hand
-String Property MRO_VERSION = "0.6.1" AutoReadOnly
+String Property MRO_VERSION = "0.7.0" AutoReadOnly
 Quest           Property MQ206_AlduinsBane      Auto
 Quest           Property MQ305_Sovngarde        Auto
 Quest           Property DLC1VQ08_Harkon        Auto

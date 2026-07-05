@@ -4,6 +4,17 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.7.0 — 2026-07-05
+
+### Added (native M2 — SHIPPED OFF BY DEFAULT)
+- Physical DR moved into MRO.dll behind SKSE/Plugins/MRO.ini
+  bPhysicalDRHook (default 0): exact per-hit curve for player and
+  teammates at a self-verifying weapon-hit call site (refuses to
+  install unless the code site matches). Papyrus perk ladder stands
+  down automatically via MRO_G_NativeDR when the hook is live.
+- Bridge globals 0x818-0x81A (mastery fractions, native handshake).
+- FOMOD descriptions synced with 0.6/0.7 behavior.
+
 ## v0.6.1 — 2026-07-04
 
 ### Changed

@@ -46,8 +46,16 @@ one-handed, restoration, evasion mastery XP all accruing.
 - **M1 vendor gold**: kDataLoaded LVLI patch (pure data edit, no code
   hooks — lowest possible crash surface). Retire the generator's LVLI
   scan + baked records.
-- **M2 armor DR hook** (ArmorRatingRescaledRemake pattern): behind an
-  INI flag, default off until tested. Retire perk ladder when confirmed.
+- **M2 armor DR hook** — IMPLEMENTED 2026-07-05 (v0.7.0), awaiting
+  in-game verification. Weapon-hit call thunk at Valhalla's site
+  (AL 38627 + 0x4A8) with SELF-VERIFYING install (requires E8 opcode at
+  the site, else logs and skips). Exact per-hit curve for player and
+  teammates; mastery ceiling via bridge globals (0x818/0x819 published
+  by Papyrus heartbeat); MRO_G_NativeDR (0x81A) stands the perk ladder
+  down. Default OFF: SKSE/Plugins/MRO.ini bPhysicalDRHook=0.
+  ENABLE FLOW: run tools/verify_hook_site_live.py 38627 0x4A8 (expect
+  E8) with the game running, then flip the INI, then check MRO.log for
+  "DR hook installed". Retire perk ladder records after play-testing.
 - **M3 resist/absorb hook** (ResistancesRescaled pattern): same
   flag-gated rollout. Retire MRO_AbsorbMGEF heal path.
 - **M4 cleanup**: Papyrus keeps MCM/mastery; MCM toggles write an INI or
