@@ -86,6 +86,12 @@ Int   _speechRung      = -1
 ; only exposes integer levels) so the MCM can show granular progress.
 Float[] _mxp
 
+; Cached mastery level/ratio globals (0x850+idx / 0x860+idx), filled
+; lazily. GetMasteryLevel and the ratio publish run per landed hit —
+; look up once, cache forever (FormIDs are frozen post-release).
+GlobalVariable[] _mLvlG
+GlobalVariable[] _mRatG
+
 ; ===============================================================
 ; STARTUP
 ; ===============================================================
@@ -937,13 +943,25 @@ GlobalVariable Function MasteryLevelGlobal(String skillId)
     If idx < 0
         Return None
     EndIf
-    Return Game.GetFormFromFile(0x850 + idx, "MRO.esp") as GlobalVariable
+    If !_mLvlG
+        _mLvlG = new GlobalVariable[14]
+    EndIf
+    If !_mLvlG[idx]
+        _mLvlG[idx] = Game.GetFormFromFile(0x850 + idx, "MRO.esp") as GlobalVariable
+    EndIf
+    Return _mLvlG[idx]
 EndFunction
 
 ; Progress-to-next-level globals (0x860+idx, value 0-1) — read by the
 ; CSF skill menu for its progress bar.
 GlobalVariable Function MasteryRatioGlobalByIndex(Int idx)
-    Return Game.GetFormFromFile(0x860 + idx, "MRO.esp") as GlobalVariable
+    If !_mRatG
+        _mRatG = new GlobalVariable[14]
+    EndIf
+    If !_mRatG[idx]
+        _mRatG[idx] = Game.GetFormFromFile(0x860 + idx, "MRO.esp") as GlobalVariable
+    EndIf
+    Return _mRatG[idx]
 EndFunction
 
 Int Function GetMasteryLevel(String skillId)
