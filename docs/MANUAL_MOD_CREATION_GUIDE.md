@@ -97,10 +97,19 @@ remove them when a script drops a property.
 ### MGEF (magic effect) — DATA is 152 bytes
 Key offsets (verify against a real MGEF before trusting):
 `[12]`=MagicSkill(0xFFFFFFFF none), `[16]`=MinSkill, `[64]`=archetype
-(0=ValueModifier, 1=Script), `[68]`=primary AV, `[80]`=castType(0=Constant),
-`[84]`=delivery(0=Self), `[88]`=secondary AV (0xFFFFFFFF), `[112]`=dualCastScale f32 1.0.
+(0=ValueModifier, 1=Script, 34=PeakValueModifier), `[68]`=primary AV,
+`[80]`=castType(0=Constant), `[84]`=delivery(0=Self), `[88]`=secondary AV
+(0xFFFFFFFF), `[112]`=dualCastScale f32 1.0.
 A scripted constant/self MGEF + VMAD = "run this ActiveMagicEffect script
 while the ability is on the actor" (OnHit handlers etc.).
+**Fortify-an-AV from a constant ability: archetype 0 (ValueModifier)
+silently does NOTHING.** Vanilla fortify effects are archetype **34
+(Peak Value Modifier)** with flags Recover(0x2)+NoArea(0x800) and 0.5 at
+DATA[48] — copy Skyrim.esm `AbFortifyCarryWeight` field-for-field (this
+cost MRO its carry-weight feature for weeks, invisible because the
+ability itself showed as applied). Note: fixing an MGEF record does NOT
+fix active-effect instances already in saves — bump the script's
+version and Remove+AddSpell in the migration.
 
 ### SPEL (ability)
 Required subrecords, in order (verified against Skyrim.esm
