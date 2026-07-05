@@ -12,23 +12,23 @@ wine, and the native SKSE plugin builds on GitHub Actions.
 
 ## Features (v0.6.x)
 
-- **Elemental uncap + absorb** — resistances scale past 100%; above it,
+- (Theoretically working, but as base spell damage, so worthless)**Elemental uncap + absorb** — resistances scale past 100%; above it,
   that element's damage heals you (full absorb at a configurable
   resistance; overheal spills into stamina/magicka)
-- **Physical DR as a Mastery Perk** — damage reduction scales past the
+- (Theoretically working)**Physical DR as a Mastery Perk** — damage reduction scales past the
   engine's armor cap, gated and ceilinged by your armor mastery; 99% DR
   demands best-in-list gear AND full mastery (target auto-calibrated
   from the load order's actual best heavy set)
-- **14-skill Mastery system** (Custom Skills Framework) — each skill
+- (Theoretically working)**14-skill Mastery system** (Custom Skills Framework) — each skill
   unlocks at base 100 and trains through real use (landed hits, casts,
   combat time, craft/barter sessions) on vanilla's L^1.95 curve extended
   to skill 300. Weapon +50% dmg, armor +300 AR, magic +50 skill,
   crafting +25%, Speech barter ladder, Smithing raises temper caps
-- **Vendor gold doubled dynamically** — the native plugin doubles the 13
+- (working)**Vendor gold doubled dynamically** — the native plugin doubles the 13
   vendor gold leveled lists in memory at load; adapts to any load order
-- **QoL** — carry weight +150 (party-wide), arrow recovery 66%, 3-day
+- (Theoretically working)**QoL** — carry weight +150 (party-wide), arrow recovery 66%, 3-day
   cell reset
-- **MCM** — boss readiness assessment, live mastery progress, tuning
+- (Theoretically working)**MCM** — boss readiness assessment, live mastery progress, tuning
   sliders, live status readout (real DR%, per-element absorb)
 
 ## Repo layout
