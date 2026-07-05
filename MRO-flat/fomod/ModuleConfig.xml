@@ -43,12 +43,9 @@ Applies to you and your current followers. Default: ON.</description>
             </plugin>
 
             <plugin name="Physical DR Past 75%">
-              <description>The armor damage-reduction cap stays at 75% for the world, but for you and your followers DR keeps scaling above it:
+              <description>MASTERY PERK: the armor damage-reduction cap stays at the engine value (75%) for the world, but you and your followers keep scaling above it — gated by your armor mastery. Your reachable ceiling grows with mastery level; 99% DR requires BOTH near-maximum armor rating (target auto-calibrated from your load order's best gear, MCM-tunable) AND full mastery of the worn armor type.
 
-  DR% = 75 + (armor rating - 750) x 0.0192
-  99% DR (near-invulnerable) at ~2000 armor rating
-
-The curve below 750 armor is completely unchanged from your load order. Enemies never benefit. Note the armor UI still displays the 75% cap - the extra reduction is real but not shown in menus.
+The curve below the engine cap is completely unchanged. Enemies never benefit. The armor UI still displays the engine cap - see MCM > Features > Live Status for your real DR.
 
 Default: ON. Toggle in MCM > Features.</description>
               <files/>
@@ -66,9 +63,9 @@ Default: ON. Toggle in MCM > Features.</description>
           <plugins order="Explicit">
 
             <plugin name="Vendor Gold Doubled">
-              <description>All 13 vendor gold pools (general goods, blacksmiths, apothecaries, inns, spell vendors, street vendors, and all five fence tiers) carry double the gold of your load order's values. Built by reading the winning override in your load order and doubling it, so it stays consistent with Requiem's economy scaling.
+              <description>All 13 vendor gold pools (general goods, blacksmiths, apothecaries, inns, spell vendors, street vendors, and all five fence tiers) carry double the gold. MRO.dll doubles the leveled lists in memory at every game load, so it adapts to any load order automatically.
 
-This is baked into MRO.esp records and cannot be toggled at runtime.</description>
+Applied by the native plugin; cannot be toggled at runtime.</description>
               <files/>
               <typeDescriptor><type name="Required"/></typeDescriptor>
             </plugin>
@@ -116,13 +113,14 @@ Purely informational - no gameplay changes.</description>
           <plugins order="Explicit">
 
             <plugin name="Enable Mastery System (recommended)">
-              <description>13 mastery skills tracked via Custom Skills Framework, one per combat/magic/craft skill. Each unlocks when its base skill reaches 100 and advances through normal use of that skill.
+              <description>14 mastery skills tracked via Custom Skills Framework. Each unlocks when its base skill reaches 100 and advances through real use (landed hits, combat casts, combat time, craft and barter sessions) on vanilla's leveling curve extended past 100.
 
 Bonuses at full mastery:
 - One-Handed / Two-Handed / Archery: +50% attack damage
-- Evasion / Heavy Armor: +300 armor rating - but only while wearing a chest piece of the matching type. Combined with the DR curve this is the path to 99% physical DR.
+- Evasion / Heavy Armor: +300 armor rating while wearing a matching chest piece; also gates the 99% DR Mastery Perk
 - Destruction / Restoration / Alteration / Conjuration / Illusion: +50 effective skill
-- Smithing / Alchemy / Enchanting: +25% crafting potency
+- Smithing / Alchemy / Enchanting: +25% crafting potency, and Smithing mastery raises temper caps up to 2x
+- Speech: buy up to 20% cheaper, sell up to 25% higher
 
 Mastery cap is adjustable in the MCM (50-200; default 100). Higher caps mean a longer grind to the same maximum bonus. Requires Custom Skills Framework.</description>
               <files>
