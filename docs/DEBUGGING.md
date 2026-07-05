@@ -41,6 +41,23 @@ bytes. The engine rejects records silently; the diff always finds it.
 | Feature works for player but not followers | Ability/perk granted to player only | Follower loop via `PO3_SKSEFunctions.GetPlayerFollowers()` in the heartbeat |
 | GMST you scale keeps growing each cycle | Reading back your own written value | Capture base before first write, keep in a saved script var |
 
+## Native hooks (pre-ship verification — MANDATORY)
+
+- **SkyrimSE.exe is Steam-DRM encrypted on disk.** Static byte reads
+  return noise. Verify hook sites against the RUNNING game:
+  `tools/verify_hook_site_live.py <AL-ID> <insn-offset> <expected-hex>`
+  (reads /proc/<pid>/mem at module base + AL-resolved RVA).
+- `tools/verify_hook_site.py` parses the local Address Library .bin
+  (decode ported from CommonLibSSE REL::IDDatabase) — useful for the
+  ID->RVA mapping even when disk bytes are useless.
+- **Instruction-cave / fixed-offset asm patches are banned**: the
+  1.6.1130+ recompile moved ArmorRatingRescaledRemake's both cave sites
+  (verified live 2026-07-04) — one game update = CTD. Prefer
+  `write_vfunc` vtable hooks (layout-independent); call-site thunks
+  only with a live byte-match first.
+- capstone (pip --user --break-system-packages) disassembles live
+  dumps when hunting for relocated code.
+
 ## Crash analysis
 Crash logs: `.../compatdata/3375297225/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/SKSE/crash-*.log`.
 Check POSSIBLE RELEVANT OBJECTS + CALL STACK for our forms/scripts. MRO is
