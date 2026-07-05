@@ -8,6 +8,7 @@
     <file source="MRO.esp" destination="MRO.esp"/>
     <file source="SEQ/MRO.seq" destination="SEQ/MRO.seq"/>
     <file source="SKSE/Plugins/MRO.dll" destination="SKSE/Plugins/MRO.dll"/>
+    <file source="SKSE/Plugins/MRO.ini" destination="SKSE/Plugins/MRO.ini"/>
     <file source="Scripts/MRO_AbsorbMGEF.pex" destination="Scripts/MRO_AbsorbMGEF.pex"/>
     <file source="Scripts/MRO_EventsMGEF.pex" destination="Scripts/MRO_EventsMGEF.pex"/>
     <file source="Scripts/MRO_MCM.pex" destination="Scripts/MRO_MCM.pex"/>

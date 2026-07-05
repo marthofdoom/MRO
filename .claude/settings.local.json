@@ -40,7 +40,10 @@
       "Bash(git push *)",
       "Bash(sed -i 's/^## v0.6.0 — 2026-07-04/## v0.6.1 — 2026-07-04\\\\n\\\\n### Changed\\\\n- MCM: version shown under Features > About; capitalization made\\\\n  consistent \\(Detected\\\\/Not Detected, COMPLETED, Survivable\\); stale\\\\n  \"13 skills\" and hardcoded 200% texts corrected.\\\\n- release.sh now stamps the version into the MCM and compiles all\\\\n  scripts automatically.\\\\n\\\\n## v0.6.0 — 2026-07-04/' CHANGELOG.md)",
       "Bash(sed -i 's/<Version>0.6.0<\\\\/Version>/<Version>0.6.1<\\\\/Version>/' MRO-flat/fomod/info.xml)",
-      "Bash(./release.sh 0.6.1)"
+      "Bash(./release.sh 0.6.1)",
+      "Bash(cp MRO-nofomod/MRO.esp \"/mnt/gaming/modlists/LoreRim/mods/MRO/MRO.esp\")",
+      "Bash(cp MRO-nofomod/Scripts/MRO_MCM.pex \"/mnt/gaming/modlists/LoreRim/mods/MRO/Scripts/MRO_MCM.pex\")",
+      "Bash(curl -s https://raw.githubusercontent.com/D7ry/valhallaCombat/Master/src/bin/Hooks.cpp -o /tmp/claude-1000/-mnt-gaming-modlists-Projects-Requiem-modification/70e80b10-ace2-4bb6-b850-8d3780031528/scratchpad/valhalla_Hooks.cpp)"
     ]
   }
 }

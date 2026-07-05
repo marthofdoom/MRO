@@ -126,6 +126,7 @@ Event OnUpdate()
         _installedVersion = SCRIPT_VERSION
     EndIf
 
+    PublishBridgeGlobals()
     ApplyGMSTFeatures()
     RefreshFollowerAbilities()
 
@@ -262,6 +263,28 @@ Function RefreshAbilities()
 EndFunction
 
 ; ===============================================================
+; PAPYRUS<->DLL BRIDGE
+; Fractions published for the native DR hook; MRO_G_NativeDR is set
+; by the DLL when its hook is live, telling the perk ladder to stand
+; down. Looked up by FormID (not VMAD) so existing saves work.
+; ===============================================================
+Function PublishBridgeGlobals()
+    GlobalVariable la = Game.GetFormFromFile(0x818, "MRO.esp") as GlobalVariable
+    If la
+        la.SetValue(GetMasteryFraction(ID_LA) * 100.0)
+    EndIf
+    GlobalVariable ha = Game.GetFormFromFile(0x819, "MRO.esp") as GlobalVariable
+    If ha
+        ha.SetValue(GetMasteryFraction(ID_HA) * 100.0)
+    EndIf
+EndFunction
+
+Bool Function NativeDRActive()
+    GlobalVariable g = Game.GetFormFromFile(0x81A, "MRO.esp") as GlobalVariable
+    Return g && g.GetValueInt() == 1
+EndFunction
+
+; ===============================================================
 ; PHYSICAL DR ABOVE THE ENGINE'S ARMOR CAP — "MASTERY PERKS"
 ; The DR ladder is the armor masteries' signature perk: it only
 ; functions with a matching-type chest piece worn AND the player's
@@ -278,7 +301,7 @@ Function UpdateArmorDRFor(Actor akActor)
         Return
     EndIf
     Int want = -1
-    If FeatureEnabled(MRO_F_ArmorCap) && MasteryEnabled()
+    If FeatureEnabled(MRO_F_ArmorCap) && MasteryEnabled() && !NativeDRActive()
         Float mFrac = 0.0
         Int wc = WornChestClassOf(akActor)
         If wc == 0

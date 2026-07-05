@@ -66,6 +66,9 @@ FID_G_ARMORMASTB   = OWN | 0x814  # tuning: armor mastery bonus at cap (default 
 FID_G_WEAPMASTB    = OWN | 0x815  # tuning: weapon mastery bonus %% at cap (default 50)
 FID_EVENTS_MGEF    = OWN | 0x816  # hidden AME hosting PO3 event receivers
 FID_EVENTS_SPELL   = OWN | 0x817  # always-on ability carrying it
+FID_G_LAFRAC       = OWN | 0x818  # bridge: player Evasion mastery fraction 0-100 (Papyrus->DLL)
+FID_G_HAFRAC       = OWN | 0x819  # bridge: player Heavy mastery fraction 0-100 (Papyrus->DLL)
+FID_G_NATIVEDR     = OWN | 0x81A  # bridge: DLL sets 1 when its DR hook is active (DLL->Papyrus)
 FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
@@ -190,6 +193,12 @@ GLOBALS = [
     ("MRO_T_DR99Armor",    FID_G_DR99ARMOR,   'f', 2000.0),
     ("MRO_T_ArmorMasteryBonus",  FID_G_ARMORMASTB, 'f', 300.0),
     ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
+    # Papyrus<->DLL bridge globals: accessed via GetFormFromFile /
+    # TESDataHandler::LookupForm — deliberately NOT VMAD-wired so they
+    # work on saves whose quest instances predate them.
+    ("MRO_G_LAFrac",       FID_G_LAFRAC,      'f', 0.0),
+    ("MRO_G_HAFrac",       FID_G_HAFRAC,      'f', 0.0),
+    ("MRO_G_NativeDR",     FID_G_NATIVEDR,    'f', 0.0),
 ]
 
 def make_globs(overrides: dict = None) -> bytes:
