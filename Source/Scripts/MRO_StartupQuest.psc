@@ -589,13 +589,20 @@ Float Function GetCurrentDRPct()
     EndIf
     Float ar = PlayerRef.GetActorValue("DamageResist")
     Float d = ar * scaling
-    ; Mastery gate mirrors UpdateArmorDRFor
+    ; Read the BRIDGE globals — the exact values the native hook uses —
+    ; so this readout matches reality (including console overrides).
     Float mFrac = 0.0
     Int wc = WornChestWeightClass()
     If wc == 0
-        mFrac = GetMasteryFraction(ID_LA)
+        GlobalVariable la = Game.GetFormFromFile(0x818, "MRO.esp") as GlobalVariable
+        If la
+            mFrac = la.GetValue() / 100.0
+        EndIf
     ElseIf wc == 1
-        mFrac = GetMasteryFraction(ID_HA)
+        GlobalVariable ha = Game.GetFormFromFile(0x819, "MRO.esp") as GlobalVariable
+        If ha
+            mFrac = ha.GetValue() / 100.0
+        EndIf
     EndIf
     If d < capPct || !FeatureEnabled(MRO_F_ArmorCap) || !MasteryEnabled() || mFrac <= 0.0
         If d > capPct

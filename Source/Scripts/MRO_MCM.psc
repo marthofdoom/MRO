@@ -401,8 +401,42 @@ Function RenderFeatures()
     AddHeaderOption("Live Status")
     Actor player = Game.GetPlayer()
     Float dr = q.GetCurrentDRPct()
+    String engine = "Perk Ladder (Papyrus)"
+    GlobalVariable ndr = Game.GetFormFromFile(0x81A, "MRO.esp") as GlobalVariable
+    If ndr && ndr.GetValueInt() == 1
+        engine = "Native (MRO.dll)"
+    EndIf
+    AddTextOption("DR Engine", engine)
+    String chest = "None"
+    Float mfrac = 0.0
+    GlobalVariable laG = Game.GetFormFromFile(0x818, "MRO.esp") as GlobalVariable
+    GlobalVariable haG = Game.GetFormFromFile(0x819, "MRO.esp") as GlobalVariable
+    Armor worn = player.GetWornForm(0x00000004) as Armor
+    If worn && worn.GetWeightClass() == 0
+        chest = "Light"
+        If laG
+            mfrac = laG.GetValue()
+        EndIf
+    ElseIf worn && worn.GetWeightClass() == 1
+        chest = "Heavy"
+        If haG
+            mfrac = haG.GetValue()
+        EndIf
+    EndIf
+    AddTextOption("Worn Chest / Mastery", chest + " / " + (mfrac as Int) + "%")
     AddTextOption("Armor Rating", (player.GetActorValue("DamageResist") as Int) as String)
     AddTextOption("Physical DR",  ((dr as Int) as String) + "%")
+    String absorbState = "Off"
+    MRO_StartupQuest qq = MRO_Quest as MRO_StartupQuest
+    If qq && qq.FeatureEnabled(MRO_F_Absorb) && qq.MRO_AbsorbAbility && player.HasSpell(qq.MRO_AbsorbAbility)
+        absorbState = "Active"
+    EndIf
+    AddTextOption("Absorb Ability", absorbState)
+    String cwState = "Off"
+    If qq && qq.FeatureEnabled(MRO_F_CarryWeight) && qq.MRO_CarryWeightAbility && player.HasSpell(qq.MRO_CarryWeightAbility)
+        cwState = "Active"
+    EndIf
+    AddTextOption("Carry Weight Ability", cwState)
     AddTextOption("Fire",   ResistStatus(player, "FireResist"))
     AddTextOption("Frost",  ResistStatus(player, "FrostResist"))
     AddTextOption("Shock",  ResistStatus(player, "ElectricResist"))
