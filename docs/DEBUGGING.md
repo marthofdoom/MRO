@@ -12,6 +12,7 @@ bytes. The engine rejects records silently; the diff always finds it.
 |---|---|---|
 | Record absent from `help <edid> 4` in-game, but present when parsing the ESP | Loader rejected it: wrong/extra/missing subrecord vs vanilla layout | Diff against vanilla twin. Known: PERK must have no trailing PRKF after last entry, playable=1 hidden=0 |
 | Constant ability does nothing, not in Active Effects | SPIT spell type 3 (Lesser Power) — must be **4** (Ability). Or SPEL missing OBND/ETYP/DESC | See guide "SPEL (ability)" recipe |
+| Fortify-AV ability applies but the actor value never moves | MGEF archetype 0 (Value Modifier) silently no-ops for fortify-from-ability; vanilla fortify MGEFs are archetype **34 (Peak Value Modifier)** + Recover flag | Copy the vanilla twin's DATA field-for-field (AbFortifyCarryWeight: flags 0x208802, 0.5 at DATA[48], archetype 34). Record fixes don't reach active-effect instances already in saves — bump SCRIPT_VERSION and Remove+AddSpell in the migration |
 | One record broken while its neighbors work | FormID collides with a real record in a master (own prefix wrong) | Own records need own-file master index prefix (0x05 with 5 masters) AND 0x800-0xFFF (ESL). `tools/audit_esp.py` checks both |
 | Start-game-enabled quest never starts on existing save | No Run Once flag + no SEQ file | Generator writes SEQ/MRO.seq — ship it. Run Once quests don't need SEQ (which is why one quest works and the other doesn't) |
 | MCM never appears | Quest not running (above), or quest has Run Once (SkyUI can't re-register), or SkyUI hasn't rescanned | Fix flags/SEQ; then `setstage ski_configmanagerinstance 1` |
@@ -40,6 +41,9 @@ bytes. The engine rejects records silently; the diff always finds it.
 | Vendor gold unchanged after LVLI override | Merchant chest only re-rolls on cell reset | Wait 72+ in-game hours away from the cell |
 | Feature works for player but not followers | Ability/perk granted to player only | Follower loop via `PO3_SKSEFunctions.GetPlayerFollowers()` in the heartbeat |
 | GMST you scale keeps growing each cycle | Reading back your own written value | Capture base before first write, keep in a saved script var |
+| DLL writes a GlobalVariable at kDataLoaded but Papyrus reads the old value in-game | GlobalVariable values are SAVE-PERSISTED: loading a save restores its stored value over anything written earlier (cost us the v0.7.0 NativeDR handshake) | Re-assert DLL-owned globals on `kPostLoadGame` and `kNewGame`, not just kDataLoaded |
+| MCM checkbox doesn't repaint until the menu is closed and reopened | OnOptionSelect routed a read/write through the quest script; cross-script calls block on the target's instance lock, which the 30s heartbeat holds for its whole run | Keep the repaint path local to the MCM script (read the GlobalVariable directly, SetValue, SetToggleOptionValue), and only then call into the quest |
+| Console `set MRO_G_LAFrac to X` seems ignored / snaps back | Bridge globals are ONE-WAY (mastery level -> fraction -> global -> DLL); the 30s heartbeat republishes the real mastery over any manual write | By design. Test DR with the MCM Features > Testing buttons, which grant real CSF mastery levels |
 
 ## Native hooks (pre-ship verification — MANDATORY)
 

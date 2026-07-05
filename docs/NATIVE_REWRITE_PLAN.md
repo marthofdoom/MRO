@@ -61,6 +61,13 @@ one-handed, restoration, evasion mastery XP all accruing.
   (wrong binary revision) instead of versionlib-1-6-1170-0.bin.
   VALIDATE THE DATABASE FILE against crash-log ground truth before
   trusting any address (ID 38785 -> 0x6c4d90 on this exe).
+  v0.7.1 (2026-07-05): the kDataLoaded write of MRO_G_NativeDR=1 was
+  clobbered by save load (GlobalVariable values are save-persisted) --
+  the MCM showed "Perk Ladder" and Papyrus never stood down, though the
+  code hook itself was live. Fixed: re-assert on kPostLoadGame/kNewGame.
+  Testing now uses MCM Features > Testing buttons (real CSF mastery
+  levels via IncrementSkillBy) because the 30s heartbeat overwrites
+  console writes to the bridge globals by design.
   Combat stress test pending; then retire ladder perk records.
 - **M3 resist/absorb hook** (ResistancesRescaled pattern): same
   flag-gated rollout. Retire MRO_AbsorbMGEF heal path.
