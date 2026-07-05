@@ -44,7 +44,11 @@
       "Bash(cp MRO-nofomod/MRO.esp \"/mnt/gaming/modlists/LoreRim/mods/MRO/MRO.esp\")",
       "Bash(cp MRO-nofomod/Scripts/MRO_MCM.pex \"/mnt/gaming/modlists/LoreRim/mods/MRO/Scripts/MRO_MCM.pex\")",
       "Bash(curl -s https://raw.githubusercontent.com/D7ry/valhallaCombat/Master/src/bin/Hooks.cpp -o /tmp/claude-1000/-mnt-gaming-modlists-Projects-Requiem-modification/70e80b10-ace2-4bb6-b850-8d3780031528/scratchpad/valhalla_Hooks.cpp)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/ersh1/Precision/main/src/Hooks.h\")",
+      "Bash(curl -s \"https://api.github.com/repos/JudahJL/valhallaCombat/git/trees/Master?recursive=1\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/JudahJL/valhallaCombat/Master/include/Hooks.h\")",
+      "Bash(curl -s https://raw.githubusercontent.com/JudahJL/valhallaCombat/Master/include/Hooks.h -o /tmp/claude-1000/-mnt-gaming-modlists-Projects-Requiem-modification/70e80b10-ace2-4bb6-b850-8d3780031528/scratchpad/jj_hooks.h)"
     ]
   }
 }

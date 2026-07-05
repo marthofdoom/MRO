@@ -1,1 +1,0 @@
-How are the cusomt skills tracked? Can we make the mcm show more granular progress? Does it show the vanilla level up thing when it happens or a toast? Why doesnt it find the experience mod even though its installed? Vendor gold doesnt seem to be doubled.Or its doublign initial number and not the doubled number that was winning already.
