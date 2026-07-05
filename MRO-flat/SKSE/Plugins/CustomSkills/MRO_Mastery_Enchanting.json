@@ -2,6 +2,6 @@
     "id": "MRO_Mastery_Enchanting",
     "name": "Enchanting Mastery",
     "description": "Mastery earned through infusing countless items beyond conventional limits. Unlocks after reaching 100 in Enchanting.",
-    "levelCount": 200,
-    "ratio": 1.0
+    "ratio": "MRO.esp|0x86C",
+    "level": "MRO.esp|0x85C"
 }

@@ -312,7 +312,18 @@ Function TestGrantArmorMastery(Bool heavy, Int levels)
     If heavy
         id = ID_HA
     EndIf
-    CustomSkills.IncrementSkillBy(id, levels)
+    GlobalVariable lg = MasteryLevelGlobal(id)
+    If !lg
+        Debug.Notification("MRO: mastery level global missing - ESP out of date?")
+        Return
+    EndIf
+    Int newLevel = lg.GetValueInt() + levels
+    Float cap = GetMasteryCap()
+    If newLevel > cap as Int
+        newLevel = cap as Int
+    EndIf
+    lg.SetValue(newLevel as Float)
+    CustomSkills.ShowSkillIncreaseMessage(id, newLevel)
     PublishBridgeGlobals()
     If MasteryEnabled()
         UpdateArmorMasteryBonuses()
@@ -471,11 +482,11 @@ Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akP
     EndIf
     String wSkill = GetWeaponSkill(w)
     If wSkill == "OH" && PlayerRef.GetBaseActorValue("OneHanded") >= 100.0
-        GrantMasteryXP(ID_OH, CustomSkills.GetSkillLevel(ID_OH))
+        GrantMasteryXP(ID_OH, GetMasteryLevel(ID_OH))
     ElseIf wSkill == "TH" && PlayerRef.GetBaseActorValue("TwoHanded") >= 100.0
-        GrantMasteryXP(ID_TH, CustomSkills.GetSkillLevel(ID_TH))
+        GrantMasteryXP(ID_TH, GetMasteryLevel(ID_TH))
     ElseIf wSkill == "MK" && PlayerRef.GetBaseActorValue("Marksman") >= 100.0
-        GrantMasteryXP(ID_MK, CustomSkills.GetSkillLevel(ID_MK))
+        GrantMasteryXP(ID_MK, GetMasteryLevel(ID_MK))
     EndIf
 EndFunction
 
@@ -485,18 +496,18 @@ EndFunction
 Event OnMenuClose(String asMenuName)
     If asMenuName == "Crafting Menu"
         If PlayerRef.GetBaseActorValue("Smithing") >= 100.0
-            GrantMasteryXP(ID_SM, CustomSkills.GetSkillLevel(ID_SM))
+            GrantMasteryXP(ID_SM, GetMasteryLevel(ID_SM))
         EndIf
         If PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
-            GrantMasteryXP(ID_AC, CustomSkills.GetSkillLevel(ID_AC))
+            GrantMasteryXP(ID_AC, GetMasteryLevel(ID_AC))
         EndIf
     ElseIf asMenuName == "EnchantConstructMenu"
         If PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
-            GrantMasteryXP(ID_EN, CustomSkills.GetSkillLevel(ID_EN))
+            GrantMasteryXP(ID_EN, GetMasteryLevel(ID_EN))
         EndIf
     ElseIf asMenuName == "BarterMenu"
         If PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
-            GrantMasteryXP(ID_SP, CustomSkills.GetSkillLevel(ID_SP))
+            GrantMasteryXP(ID_SP, GetMasteryLevel(ID_SP))
         EndIf
     EndIf
 EndEvent
@@ -537,8 +548,15 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     _mxp[idx] = _mxp[idx] + (baseGrant / needed)
     If _mxp[idx] >= 1.0
         _mxp[idx] = _mxp[idx] - 1.0
-        CustomSkills.IncrementSkill(skillId)
+        GlobalVariable lg = MasteryLevelGlobal(skillId)
+        If lg
+            lg.SetValue((currentMastery + 1) as Float)
+        EndIf
         CustomSkills.ShowSkillIncreaseMessage(skillId, currentMastery + 1)
+    EndIf
+    GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
+    If rg
+        rg.SetValue(_mxp[idx])
     EndIf
 EndFunction
 
@@ -681,15 +699,15 @@ Function GrantSpellMasteryXP(Spell sp)
     EndIf
     String school = eff.GetAssociatedSkill()
     If school == "Destruction" && PlayerRef.GetBaseActorValue("Destruction") >= 100.0
-        GrantMasteryXP(ID_DS, CustomSkills.GetSkillLevel(ID_DS))
+        GrantMasteryXP(ID_DS, GetMasteryLevel(ID_DS))
     ElseIf school == "Restoration" && PlayerRef.GetBaseActorValue("Restoration") >= 100.0
-        GrantMasteryXP(ID_RS, CustomSkills.GetSkillLevel(ID_RS))
+        GrantMasteryXP(ID_RS, GetMasteryLevel(ID_RS))
     ElseIf school == "Alteration" && PlayerRef.GetBaseActorValue("Alteration") >= 100.0
-        GrantMasteryXP(ID_AL, CustomSkills.GetSkillLevel(ID_AL))
+        GrantMasteryXP(ID_AL, GetMasteryLevel(ID_AL))
     ElseIf school == "Conjuration" && PlayerRef.GetBaseActorValue("Conjuration") >= 100.0
-        GrantMasteryXP(ID_CJ, CustomSkills.GetSkillLevel(ID_CJ))
+        GrantMasteryXP(ID_CJ, GetMasteryLevel(ID_CJ))
     ElseIf school == "Illusion" && PlayerRef.GetBaseActorValue("Illusion") >= 100.0
-        GrantMasteryXP(ID_IL, CustomSkills.GetSkillLevel(ID_IL))
+        GrantMasteryXP(ID_IL, GetMasteryLevel(ID_IL))
     EndIf
 EndFunction
 
@@ -894,9 +912,9 @@ EndFunction
 Function GrantCombatArmorXP()
     Int wornClass = WornChestWeightClass()
     If wornClass == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
-        GrantMasteryXP(ID_LA, CustomSkills.GetSkillLevel(ID_LA))
+        GrantMasteryXP(ID_LA, GetMasteryLevel(ID_LA))
     ElseIf wornClass == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
-        GrantMasteryXP(ID_HA, CustomSkills.GetSkillLevel(ID_HA))
+        GrantMasteryXP(ID_HA, GetMasteryLevel(ID_HA))
     EndIf
 EndFunction
 
@@ -909,8 +927,31 @@ Float Function GetMasteryBonusPct(String skillId)
     Return GetMasteryFraction(skillId) * 100.0
 EndFunction
 
+; Mastery levels live in MRO's own globals (0x850+idx), bound as each
+; CSF skill's "level" in the JSONs. CSF only ever READS them: its
+; Increment functions are silent no-ops without a level binding AND
+; hard-cap at 100, so Papyrus writes the globals directly (found
+; 2026-07-05 — before the binding existed, no mastery ever leveled).
+GlobalVariable Function MasteryLevelGlobal(String skillId)
+    Int idx = SkillIndex(skillId)
+    If idx < 0
+        Return None
+    EndIf
+    Return Game.GetFormFromFile(0x850 + idx, "MRO.esp") as GlobalVariable
+EndFunction
+
+; Progress-to-next-level globals (0x860+idx, value 0-1) — read by the
+; CSF skill menu for its progress bar.
+GlobalVariable Function MasteryRatioGlobalByIndex(Int idx)
+    Return Game.GetFormFromFile(0x860 + idx, "MRO.esp") as GlobalVariable
+EndFunction
+
 Int Function GetMasteryLevel(String skillId)
-    Return CustomSkills.GetSkillLevel(skillId)
+    GlobalVariable g = MasteryLevelGlobal(skillId)
+    If g
+        Return g.GetValueInt()
+    EndIf
+    Return 0
 EndFunction
 
 Float Function GetMasteryCap()
@@ -933,7 +974,7 @@ EndFunction
 
 Float Function GetMasteryFraction(String skillId)
     Float cap = GetMasteryCap()
-    Float raw = CustomSkills.GetSkillLevel(skillId) as Float
+    Float raw = GetMasteryLevel(skillId) as Float
     If raw >= cap
         Return 1.0
     EndIf

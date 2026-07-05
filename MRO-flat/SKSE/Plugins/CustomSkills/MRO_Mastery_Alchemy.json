@@ -2,6 +2,6 @@
     "id": "MRO_Mastery_Alchemy",
     "name": "Alchemy Mastery",
     "description": "Mastery earned through brewing vast numbers of potions beyond conventional limits. Unlocks after reaching 100 in Alchemy.",
-    "levelCount": 200,
-    "ratio": 1.0
+    "ratio": "MRO.esp|0x86B",
+    "level": "MRO.esp|0x85B"
 }

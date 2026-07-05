@@ -74,6 +74,24 @@ FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
 FID_SP_FLST        = OWN | 0x845  # FormList holding the 5 barter perks in order
 
+# Mastery LEVEL globals, one per skill in SkillIndex order (OH TH MK LA
+# HA DS RS AL CJ IL SM AC EN SP). Bound as each CSF skill's "level" in
+# the CustomSkills JSONs; CSF only READS them (its own Increment caps at
+# a hardcoded 100 and its Level binding is required for any level at all
+# — found 2026-07-05: JSONs without "level" make every CSF increment a
+# silent no-op). Papyrus writes these directly via SetValue, which also
+# lets masteries exceed 100 for the MCM's 200 cap. Non-VMAD, looked up
+# by FormID like the bridge globals.
+FID_ML_BASE        = OWN | 0x850  # ..0x85D
+# Mastery progress-ratio globals (0-1), same order: published from the
+# Papyrus _mxp accumulators so the CSF skill menu shows progress.
+FID_MR_BASE        = OWN | 0x860  # ..0x86D
+
+MASTERY_SKILLS = ["OneHanded", "TwoHanded", "Marksman", "LightArmor",
+                  "HeavyArmor", "Destruction", "Restoration", "Alteration",
+                  "Conjuration", "Illusion", "Smithing", "Alchemy",
+                  "Enchanting", "Speech"]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Binary helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -200,6 +218,11 @@ GLOBALS = [
     ("MRO_G_HAFrac",       FID_G_HAFRAC,      'f', 0.0),
     ("MRO_G_NativeDR",     FID_G_NATIVEDR,    'f', 0.0),
 ]
+# Mastery level + ratio globals (see FID_ML_BASE comment)
+for _i, _sk in enumerate(MASTERY_SKILLS):
+    GLOBALS.append((f"MRO_ML_{_sk}", FID_ML_BASE + _i, 'f', 0.0))
+for _i, _sk in enumerate(MASTERY_SKILLS):
+    GLOBALS.append((f"MRO_MR_{_sk}", FID_MR_BASE + _i, 'f', 0.0))
 
 def make_globs(overrides: dict = None) -> bytes:
     out = BytesIO()
