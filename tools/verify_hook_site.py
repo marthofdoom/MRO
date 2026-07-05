@@ -16,7 +16,7 @@ Decode logic ported from CommonLibSSE-NG's REL::IDDatabase (unpack_file).
 import struct, sys
 
 VERSIONLIB = ("/mnt/gaming/modlists/LoreRim/mods/Address Library for SKSE Plugins"
-              "/SKSE/Plugins/versionlib-1-6-1170-0-1.bin")
+              "/SKSE/Plugins/versionlib-1-6-1170-0.bin")
 GAME_EXE = "/mnt/gaming/modlists/LoreRim/Stock Game/SkyrimSE.exe"
 
 

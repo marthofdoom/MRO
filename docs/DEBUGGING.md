@@ -47,6 +47,14 @@ bytes. The engine rejects records silently; the diff always finds it.
   return noise. Verify hook sites against the RUNNING game:
   `tools/verify_hook_site_live.py <AL-ID> <insn-offset> <expected-hex>`
   (reads /proc/<pid>/mem at module base + AL-resolved RVA).
+- **MULTIPLE versionlib .bin files can exist for one game version**
+  (e.g. versionlib-1-6-1170-0.bin vs -0-1.bin for a different binary
+  revision). The wrong one parses fine and yields plausible-but-shifted
+  addresses — half a day was lost to "proving" a function inlined that
+  wasn't. Validate the DB against crash-log ground truth first: a crash
+  log line like "38785+0x16D => exe+0x6C4EFD" pins ID 38785 to
+  0x6c4d90; check `load_database(...)[38785]` matches before believing
+  anything else.
 - `tools/verify_hook_site.py` parses the local Address Library .bin
   (decode ported from CommonLibSSE REL::IDDatabase) — useful for the
   ID->RVA mapping even when disk bytes are useless.

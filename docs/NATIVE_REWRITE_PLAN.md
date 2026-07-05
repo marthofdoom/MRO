@@ -53,20 +53,15 @@ one-handed, restoration, evasion mastery XP all accruing.
   teammates; mastery ceiling via bridge globals (0x818/0x819 published
   by Papyrus heartbeat); MRO_G_NativeDR (0x81A) stands the perk ladder
   down. Default OFF: SKSE/Plugins/MRO.ini bPhysicalDRHook=0.
-  ACTIVATION ATTEMPT 2026-07-04: site check REFUSED (0x70, not E8) and
-  investigation proved Valhalla's processHit callee (old AE 0x64BAB0 =
-  AL ID 38586) is FULLY INLINED on 1.6.1170: its ID maps mid-instruction
-  and zero E8 callers exist in the entire exe. The shipped hook can
-  never install on this runtime (safe: it self-refuses). REVISED M2
-  TARGET: HitData::Populate (ID 44001 — real function on 1170, sane
-  prologue; Precision's choice). Six call sites in fn 38627 are
-  live-hooked by running mods (targets in trampoline space; wine makes
-  trampoline pages unreadable via /proc/mem, so identify Populate's
-  site by disassembling arg-setup context or from Nexus-current
-  Precision). Thunk signature: Populate(HitData* this, TESObjectREFR*
-  src, TESObjectREFR* target, InventoryEntryData* weapon, bool
-  offhand) — call original, then adjust this->totalDamage when target
-  is player/teammate. Same INI gate + E8 self-check pattern.
+  LIVE 2026-07-04 20:00 on the user's save: self-verified E8 at
+  38627+0x4A8 (site shared with another mod's trampoline — standard
+  stacking, we wrap it), NativeDR handshake confirmed, Papyrus ladder
+  standing down. The earlier "processHit inlined" investigation is
+  RETRACTED — it was an artifact of loading versionlib-1-6-1170-0-1.bin
+  (wrong binary revision) instead of versionlib-1-6-1170-0.bin.
+  VALIDATE THE DATABASE FILE against crash-log ground truth before
+  trusting any address (ID 38785 -> 0x6c4d90 on this exe).
+  Combat stress test pending; then retire ladder perk records.
 - **M3 resist/absorb hook** (ResistancesRescaled pattern): same
   flag-gated rollout. Retire MRO_AbsorbMGEF heal path.
 - **M4 cleanup**: Papyrus keeps MCM/mastery; MCM toggles write an INI or
