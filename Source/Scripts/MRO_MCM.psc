@@ -1,6 +1,9 @@
 Scriptname MRO_MCM extends SKI_ConfigBase
 
 Quest           Property MRO_Quest              Auto
+
+; Stamped by release.sh — do not edit by hand
+String Property MRO_VERSION = "0.6.1" AutoReadOnly
 Quest           Property MQ206_AlduinsBane      Auto
 Quest           Property MQ305_Sovngarde        Auto
 Quest           Property DLC1VQ08_Harkon        Auto
@@ -184,7 +187,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidArmorCap
         SetInfoText("MASTERY PERK: physical DR past the engine cap requires the matching armor mastery. Your reachable ceiling grows with mastery level (99% only at full mastery AND max armor). Followers share your mastery. Armor UI still displays the engine cap.")
     ElseIf a_option == _oidAbsorb
-        SetInfoText("Resistance above 100% heals you for that element's damage: 1% per point over 100, full heal at 200%. Covers spells, enchants, drains, poisons.")
+        SetInfoText("Resistance above 100% heals you for that element's damage: 1% per point over 100, full heal at the Tuning slider value (default 200%). Covers spells, enchants, drains, poisons.")
     ElseIf a_option == _oidCarryWeight
         SetInfoText("Permanent +150 carry weight for you and your followers.")
     ElseIf a_option == _oidArrowRecov
@@ -192,7 +195,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidCellReset
         SetInfoText("Cells respawn after 3 days (7 if cleared) instead of Requiem's 30. Shops restock fast; dungeons repopulate fast too.")
     ElseIf a_option == _oidMastery
-        SetInfoText("13 skills that unlock at base skill 100 and grow with use. Armor masteries need a matching chest piece worn.")
+        SetInfoText("14 skills that unlock at base skill 100 and grow with use. Armor masteries need a matching chest piece worn.")
     ElseIf a_option == _oidVendorGold
         SetInfoText("All 13 vendor gold pools doubled at game load by MRO.dll - adapts to any load order. Merchants pick it up on their next restock.")
     ElseIf a_option == _oidMasteryCap
@@ -239,7 +242,7 @@ Function RenderBossReadiness()
     AddTextOption("Health",         (hp as Int) as String)
     AddTextOption("Fire Resist",    ((fireRes as Int) as String) + "%")
     AddTextOption("Magic Resist",   ((magRes as Int) as String) + "%")
-    _oidDrain = AddTextOption("Drain Pulses", "~" + (drainPulses as String) + " survivable")
+    _oidDrain = AddTextOption("Drain Pulses", "~" + (drainPulses as String) + " Survivable")
     AddEmptyOption()
 
     AddHeaderOption("Alduin - Throat of the World")
@@ -283,9 +286,9 @@ Function RenderBossReadiness()
     EndIf
 
     AddHeaderOption("Detected Mods")
-    String expStatus = "Not found"
+    String expStatus = "Not Detected"
     If MiscUtil.FileExists("data/skse/plugins/Experience.dll")
-        expStatus = "Found (XP-based leveling)"
+        expStatus = "Detected (XP-Based Leveling)"
     EndIf
     AddTextOption("Experience", expStatus)
 EndFunction
@@ -409,6 +412,10 @@ Function RenderFeatures()
 
     AddHeaderOption("Baked Into ESP")
     _oidVendorGold = AddTextOption("Vendor Gold", "Doubled")
+    AddEmptyOption()
+
+    AddHeaderOption("About")
+    AddTextOption("Version", MRO_VERSION)
 EndFunction
 
 Float Function SliderVal(GlobalVariable gv, Float def)
@@ -442,7 +449,7 @@ EndFunction
 
 String Function AlduinPhase1Status(Int level, Float hp, Float fireRes)
     If MQ206_AlduinsBane && MQ206_AlduinsBane.IsCompleted()
-        Return "Completed"
+        Return "COMPLETED"
     EndIf
     If level >= 30 && hp >= 400.0 && fireRes >= 50.0
         Return "READY"
@@ -454,7 +461,7 @@ EndFunction
 
 String Function AlduinFinalStatus(Int level, Float hp, Float fireRes, Bool alduinBuffed)
     If MQ305_Sovngarde && MQ305_Sovngarde.IsCompleted()
-        Return "Completed"
+        Return "COMPLETED"
     EndIf
     Int   minLevel = 35
     Float minHP    = 450.0
@@ -472,7 +479,7 @@ EndFunction
 
 String Function HarkonStatus(Int level, Float hp)
     If DLC1VQ08_Harkon && DLC1VQ08_Harkon.IsCompleted()
-        Return "Completed"
+        Return "COMPLETED"
     EndIf
     If level >= 40 && hp >= 450.0
         Return "READY"
@@ -484,7 +491,7 @@ EndFunction
 
 String Function MiraakStatus(Int level, Float hp, Bool miraakModified)
     If DLC2MQ06_Miraak && DLC2MQ06_Miraak.IsCompleted()
-        Return "Completed"
+        Return "COMPLETED"
     EndIf
     Int   minLevel = 45
     Float minHP    = 500.0

@@ -4,6 +4,15 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.6.1 — 2026-07-04
+
+### Changed
+- MCM: version shown under Features > About; capitalization made
+  consistent (Detected/Not Detected, COMPLETED, Survivable); stale
+  "13 skills" and hardcoded 200% texts corrected.
+- release.sh now stamps the version into the MCM and compiles all
+  scripts automatically.
+
 ## v0.6.0 — 2026-07-04
 
 ### Changed (native M1)

@@ -37,7 +37,10 @@
       "Bash(curl -s \"https://api.github.com/repos/D7ry/valhallaCombat/commits?per_page=1\")",
       "Bash(grep -iE \"hook|\\\\.h$\")",
       "Bash(git commit -q -m 'M2 groundwork: hook-site verification tooling; reject asm-cave strategy *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(sed -i 's/^## v0.6.0 — 2026-07-04/## v0.6.1 — 2026-07-04\\\\n\\\\n### Changed\\\\n- MCM: version shown under Features > About; capitalization made\\\\n  consistent \\(Detected\\\\/Not Detected, COMPLETED, Survivable\\); stale\\\\n  \"13 skills\" and hardcoded 200% texts corrected.\\\\n- release.sh now stamps the version into the MCM and compiles all\\\\n  scripts automatically.\\\\n\\\\n## v0.6.0 — 2026-07-04/' CHANGELOG.md)",
+      "Bash(sed -i 's/<Version>0.6.0<\\\\/Version>/<Version>0.6.1<\\\\/Version>/' MRO-flat/fomod/info.xml)",
+      "Bash(./release.sh 0.6.1)"
     ]
   }
 }

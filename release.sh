@@ -20,14 +20,17 @@ if [[ -e "$DEST" ]]; then
     exit 1
 fi
 
+# Stamp version into the MCM and recompile all scripts
+sed -i "s/MRO_VERSION = \"[^\"]*\"/MRO_VERSION = \"${VER}\"/" Source/Scripts/MRO_MCM.psc
+sed -i "s/Marth Requiem Overhaul v[0-9.]*/Marth Requiem Overhaul v${VER}/" MRO_GenerateESP.py
+tools/compile.sh all
+
 # Regenerate ESP + SEQ into both package trees
 python3 MRO_GenerateESP.py MRO-nofomod/
 cp MRO-nofomod/MRO.esp MRO-flat/
 mkdir -p MRO-flat/SEQ
 cp MRO-nofomod/SEQ/MRO.seq MRO-flat/SEQ/
 
-# Zips (scripts must already be compiled into MRO-nofomod/Scripts and
-# copied to MRO-flat/Scripts — compilation needs wine, see docs/)
 rm -f "MRO-test-nofomod.zip" "MRO-v${VER}.zip"
 (cd MRO-nofomod && zip -rq "../MRO-test-nofomod.zip" .)
 (cd MRO-flat    && zip -rq "../MRO-v${VER}.zip" .)
