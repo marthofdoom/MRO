@@ -222,9 +222,11 @@ def make_globs(overrides: dict = None) -> bytes:
 
 # MGEF flags: 0x200 = No Duration, 0x400 = No Magnitude (hides the
 # meaningless "1%" on script-archetype constant abilities in the UI)
-def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery: int = 0, flags: int = 0) -> bytes:
+def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery: int = 0, flags: int = 0, f48: float = 0.0) -> bytes:
     # 152 bytes. Field positions verified against Requiem.esp scripted/value-mod MGEFs:
-    #   [64] EffectType  (0=ValueModifier, 1=Script, …)
+    #   [48] float field vanilla AbFortifyCarryWeight carries 0.5 in (taper curve
+    #        region) — copied verbatim for fortify-type effects
+    #   [64] EffectType  (0=ValueModifier, 1=Script, 34=PeakValueModifier, …)
     #   [68] Primary AV
     #   [80] CastingType (0=Constant, 1=FireAndForget, 2=Concentration)
     #   [84] Delivery    (0=Self, 2=Aimed, …)
@@ -234,6 +236,7 @@ def mgef_data(effect_type: int, primary_av: int, casting_type: int = 0, delivery
     struct.pack_into('<I', d, 0, flags)
     struct.pack_into('<I', d, 12, 0xFFFFFFFF)  # MagicSkill = none
     struct.pack_into('<I', d, 16, 0xFFFFFFFF)  # MinSkillLevel = none
+    struct.pack_into('<f', d, 48, f48)
     struct.pack_into('<I', d, 64, effect_type)
     struct.pack_into('<I', d, 68, primary_av)
     struct.pack_into('<I', d, 80, casting_type)
@@ -267,10 +270,17 @@ def make_mgefs() -> bytes:
     body += subrec('DNAM', zstr("Marth Requiem Overhaul: elemental resistances above 100% convert that element's damage into healing. Full absorption at the MCM-configured resistance (default 200%). Overhealing spills into stamina and magicka."))
     out.write(record('MGEF', FID_ABSORB_MGEF, 0, body))
 
-    # ── CarryWeightMGEF: value modifier on CarryWeight, +150 ──
+    # ── CarryWeightMGEF: fortify CarryWeight, +150 ──
+    # Field-for-field copy of Skyrim.esm AbFortifyCarryWeight (the Steed
+    # Stone effect): archetype 34 = Peak Value Modifier, flags Recover
+    # (0x2) + No Area (0x800) + Power Affects Magnitude (0x200000), and
+    # 0.5 at DATA[48]. Archetype 0 (plain Value Modifier) silently failed
+    # to raise CarryWeight from a constant ability (found 2026-07-04).
+    # Only knowing deviation: vanilla's Hide-in-UI (0x8000) dropped so
+    # the buff shows in Active Effects.
     body  = subrec('EDID', zstr("MRO_CarryWeightMGEF"))
     body += subrec('FULL', zstr("MRO - Carry Weight Bonus"))
-    body += subrec('DATA', mgef_data(effect_type=0, primary_av=AV_CARRYWEIGHT, flags=0x200))
+    body += subrec('DATA', mgef_data(effect_type=34, primary_av=AV_CARRYWEIGHT, flags=0x200802, f48=0.5))
     body += subrec('SNDD', b'')
     body += subrec('DNAM', zstr("Marth Requiem Overhaul: permanent bonus carry weight for you and your followers. Toggleable in the MRO MCM."))
     out.write(record('MGEF', FID_CW_MGEF, 0, body))

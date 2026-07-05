@@ -165,26 +165,42 @@ bool Install() {
 }  // namespace PhysicalDR
 
 void OnMessage(SKSE::MessagingInterface::Message* message) {
-    if (message->type != SKSE::MessagingInterface::kDataLoaded) {
-        return;
-    }
-    DoubleVendorGold();
+    switch (message->type) {
+    case SKSE::MessagingInterface::kDataLoaded: {
+        DoubleVendorGold();
 
-    auto* dh = RE::TESDataHandler::GetSingleton();
-    if (dh) {
-        g_laFrac = dh->LookupForm<RE::TESGlobal>(kFidLAFrac, "MRO.esp");
-        g_haFrac = dh->LookupForm<RE::TESGlobal>(kFidHAFrac, "MRO.esp");
-        g_nativeDR = dh->LookupForm<RE::TESGlobal>(kFidNativeDR, "MRO.esp");
-        g_dr99 = dh->LookupForm<RE::TESGlobal>(kFidDR99Armor, "MRO.esp");
-    }
-    if (g_drHookLive && g_nativeDR) {
-        g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
-        spdlog::info("DR hook active: MRO_G_NativeDR=1, Papyrus ladder standing down");
-    }
+        auto* dh = RE::TESDataHandler::GetSingleton();
+        if (dh) {
+            g_laFrac = dh->LookupForm<RE::TESGlobal>(kFidLAFrac, "MRO.esp");
+            g_haFrac = dh->LookupForm<RE::TESGlobal>(kFidHAFrac, "MRO.esp");
+            g_nativeDR = dh->LookupForm<RE::TESGlobal>(kFidNativeDR, "MRO.esp");
+            g_dr99 = dh->LookupForm<RE::TESGlobal>(kFidDR99Armor, "MRO.esp");
+        }
+        if (g_drHookLive && g_nativeDR) {
+            g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
+            spdlog::info("DR hook active: MRO_G_NativeDR=1, Papyrus ladder standing down");
+        }
 
-    if (auto* console = RE::ConsoleLog::GetSingleton()) {
-        console->Print("MRO native v0.7.0 loaded (DR hook: %s)",
-                       g_drHookLive ? "ACTIVE" : "off");
+        if (auto* console = RE::ConsoleLog::GetSingleton()) {
+            console->Print("MRO native v0.7.1 loaded (DR hook: %s)",
+                           g_drHookLive ? "ACTIVE" : "off");
+        }
+        break;
+    }
+    // GlobalVariable values live in the savegame: loading a save (or
+    // starting a new game) restores whatever the save last stored,
+    // silently clobbering the kDataLoaded write above. Re-assert the
+    // handshake after every load or the Papyrus ladder thinks it is
+    // still in control (v0.7.0 field bug, 2026-07-04).
+    case SKSE::MessagingInterface::kPostLoadGame:
+    case SKSE::MessagingInterface::kNewGame:
+        if (g_drHookLive && g_nativeDR) {
+            g_nativeDR->value = 1.0f;
+            spdlog::info("post-load: MRO_G_NativeDR re-asserted to 1");
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -195,7 +211,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.7.0 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.7.1 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

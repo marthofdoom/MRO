@@ -41,6 +41,10 @@ Int _oidArmorMastB  = -1
 Int _oidWeapMastB   = -1
 Int _oidXPSpeed     = -1
 
+; Testing buttons
+Int _oidTestLA      = -1
+Int _oidTestHA      = -1
+
 ; Boss readiness rows (for highlight info)
 Int _oidDrain       = -1
 Int _oidAldP1       = -1
@@ -74,54 +78,88 @@ EndEvent
 ; TOGGLE HANDLING
 ; ==========================================================
 
+; Same null-is-ON semantics as MRO_StartupQuest.FeatureEnabled, but
+; local: reading the global directly never touches the quest script.
+; Cross-script calls block on the quest's instance lock, and a running
+; 30s heartbeat holds it — routing toggle repaints through the quest is
+; why checkboxes appeared dead until the menu was closed and reopened.
+Bool Function FEnabled(GlobalVariable g)
+    Return !g || g.GetValue() != 0.0
+EndFunction
+
 Event OnOptionSelect(Int a_option)
+    ; Flip the global and repaint FIRST (all local, instant); only then
+    ; nudge the quest to apply. Even if that call stalls behind the
+    ; heartbeat, the heartbeat itself re-applies everything each cycle.
+    If a_option == _oidResistCap
+        Bool newVal = !FEnabled(MRO_F_ResistCap)
+        MRO_F_ResistCap.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidResistCap, newVal)
+        NudgeQuest(true, false)
+
+    ElseIf a_option == _oidArmorCap
+        Bool newVal = !FEnabled(MRO_F_ArmorCap)
+        MRO_F_ArmorCap.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidArmorCap, newVal)
+        NudgeQuest(true, false)
+
+    ElseIf a_option == _oidAbsorb
+        Bool newVal = !FEnabled(MRO_F_Absorb)
+        MRO_F_Absorb.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidAbsorb, newVal)
+        NudgeQuest(false, true)
+
+    ElseIf a_option == _oidCarryWeight
+        Bool newVal = !FEnabled(MRO_F_CarryWeight)
+        MRO_F_CarryWeight.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidCarryWeight, newVal)
+        NudgeQuest(false, true)
+
+    ElseIf a_option == _oidArrowRecov
+        Bool newVal = !FEnabled(MRO_F_ArrowRecovery)
+        MRO_F_ArrowRecovery.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidArrowRecov, newVal)
+        NudgeQuest(true, false)
+
+    ElseIf a_option == _oidCellReset
+        Bool newVal = !FEnabled(MRO_F_CellReset)
+        MRO_F_CellReset.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidCellReset, newVal)
+        NudgeQuest(true, false)
+
+    ElseIf a_option == _oidMastery
+        Bool newVal = !FEnabled(MRO_MasteryEnabled)
+        MRO_MasteryEnabled.SetValue(newVal as Float)
+        SetToggleOptionValue(_oidMastery, newVal)
+
+    ElseIf a_option == _oidTestLA
+        TestGrant(false)
+    ElseIf a_option == _oidTestHA
+        TestGrant(true)
+    EndIf
+EndEvent
+
+Function NudgeQuest(Bool gmst, Bool abilities)
     MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
     If !q
         Return
     EndIf
-
-    If a_option == _oidResistCap
-        Bool newVal = !q.FeatureEnabled(MRO_F_ResistCap)
-        MRO_F_ResistCap.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidResistCap, newVal)
+    If gmst
         q.ApplyGMSTFeatures()
-
-    ElseIf a_option == _oidArmorCap
-        Bool newVal = !q.FeatureEnabled(MRO_F_ArmorCap)
-        MRO_F_ArmorCap.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidArmorCap, newVal)
-        q.ApplyGMSTFeatures()
-
-    ElseIf a_option == _oidAbsorb
-        Bool newVal = !q.FeatureEnabled(MRO_F_Absorb)
-        MRO_F_Absorb.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidAbsorb, newVal)
-        q.RefreshAbilities()
-
-    ElseIf a_option == _oidCarryWeight
-        Bool newVal = !q.FeatureEnabled(MRO_F_CarryWeight)
-        MRO_F_CarryWeight.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidCarryWeight, newVal)
-        q.RefreshAbilities()
-
-    ElseIf a_option == _oidArrowRecov
-        Bool newVal = !q.FeatureEnabled(MRO_F_ArrowRecovery)
-        MRO_F_ArrowRecovery.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidArrowRecov, newVal)
-        q.ApplyGMSTFeatures()
-
-    ElseIf a_option == _oidCellReset
-        Bool newVal = !q.FeatureEnabled(MRO_F_CellReset)
-        MRO_F_CellReset.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidCellReset, newVal)
-        q.ApplyGMSTFeatures()
-
-    ElseIf a_option == _oidMastery
-        Bool newVal = !q.FeatureEnabled(MRO_MasteryEnabled)
-        MRO_MasteryEnabled.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidMastery, newVal)
     EndIf
-EndEvent
+    If abilities
+        q.RefreshAbilities()
+    EndIf
+EndFunction
+
+Function TestGrant(Bool heavy)
+    MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+    If !q
+        Return
+    EndIf
+    q.TestGrantArmorMastery(heavy, 25)
+    ForcePageReset()
+EndFunction
 
 ; ==========================================================
 ; SLIDER HANDLING
@@ -210,6 +248,8 @@ Event OnOptionHighlight(Int a_option)
         SetInfoText("Attack damage bonus (percent) granted by a fully-leveled weapon mastery.")
     ElseIf a_option == _oidXPSpeed
         SetInfoText("Global mastery XP speed multiplier. 2 = levels twice as fast, 0.5 = half speed.")
+    ElseIf a_option == _oidTestLA || a_option == _oidTestHA
+        SetInfoText("TEST BUTTON: permanently grants 25 REAL mastery levels via Custom Skills Framework (no way to remove them - throwaway saves only). Levels publish to the DR engine immediately; wear a matching chest piece and check Live Status.")
     ElseIf a_option == _oidDrain
         SetInfoText("Alduin's Drain Vitality is UNRESISTABLE and drains ~25 HP per pulse. Raw HP is the only defense - resistances do not help.")
     ElseIf a_option == _oidAldP1
@@ -375,19 +415,19 @@ Function RenderFeatures()
     SetCursorFillMode(TOP_TO_BOTTOM)
 
     AddHeaderOption("Combat Balance")
-    _oidResistCap  = AddToggleOption("Elemental Resist Uncapped", q.FeatureEnabled(MRO_F_ResistCap))
-    _oidAbsorb     = AddToggleOption("Elemental Absorb",          q.FeatureEnabled(MRO_F_Absorb))
-    _oidArmorCap   = AddToggleOption("Physical DR Past 75%",      q.FeatureEnabled(MRO_F_ArmorCap))
+    _oidResistCap  = AddToggleOption("Elemental Resist Uncapped", FEnabled(MRO_F_ResistCap))
+    _oidAbsorb     = AddToggleOption("Elemental Absorb",          FEnabled(MRO_F_Absorb))
+    _oidArmorCap   = AddToggleOption("Physical DR Past 75%",      FEnabled(MRO_F_ArmorCap))
     AddEmptyOption()
 
     AddHeaderOption("Quality of Life")
-    _oidCarryWeight = AddToggleOption("Carry Weight +150",  q.FeatureEnabled(MRO_F_CarryWeight))
-    _oidArrowRecov  = AddToggleOption("Arrow Recovery 66%", q.FeatureEnabled(MRO_F_ArrowRecovery))
-    _oidCellReset   = AddToggleOption("3-Day Cell Reset",   q.FeatureEnabled(MRO_F_CellReset))
+    _oidCarryWeight = AddToggleOption("Carry Weight +150",  FEnabled(MRO_F_CarryWeight))
+    _oidArrowRecov  = AddToggleOption("Arrow Recovery 66%", FEnabled(MRO_F_ArrowRecovery))
+    _oidCellReset   = AddToggleOption("3-Day Cell Reset",   FEnabled(MRO_F_CellReset))
     AddEmptyOption()
 
     AddHeaderOption("Mastery")
-    _oidMastery = AddToggleOption("Skill Mastery System", q.FeatureEnabled(MRO_MasteryEnabled))
+    _oidMastery = AddToggleOption("Skill Mastery System", FEnabled(MRO_MasteryEnabled))
     AddEmptyOption()
 
     AddHeaderOption("Tuning")
@@ -427,13 +467,12 @@ Function RenderFeatures()
     AddTextOption("Armor Rating", (player.GetActorValue("DamageResist") as Int) as String)
     AddTextOption("Physical DR",  ((dr as Int) as String) + "%")
     String absorbState = "Off"
-    MRO_StartupQuest qq = MRO_Quest as MRO_StartupQuest
-    If qq && qq.FeatureEnabled(MRO_F_Absorb) && qq.MRO_AbsorbAbility && player.HasSpell(qq.MRO_AbsorbAbility)
+    If FEnabled(MRO_F_Absorb) && q.MRO_AbsorbAbility && player.HasSpell(q.MRO_AbsorbAbility)
         absorbState = "Active"
     EndIf
     AddTextOption("Absorb Ability", absorbState)
     String cwState = "Off"
-    If qq && qq.FeatureEnabled(MRO_F_CarryWeight) && qq.MRO_CarryWeightAbility && player.HasSpell(qq.MRO_CarryWeightAbility)
+    If FEnabled(MRO_F_CarryWeight) && q.MRO_CarryWeightAbility && player.HasSpell(q.MRO_CarryWeightAbility)
         cwState = "Active"
     EndIf
     AddTextOption("Carry Weight Ability", cwState)
@@ -446,6 +485,11 @@ Function RenderFeatures()
 
     AddHeaderOption("Baked Into ESP")
     _oidVendorGold = AddTextOption("Vendor Gold", "Doubled")
+    AddEmptyOption()
+
+    AddHeaderOption("Testing")
+    _oidTestLA = AddTextOption("Grant +25 Evasion Mastery", "[Apply]")
+    _oidTestHA = AddTextOption("Grant +25 Heavy Armor Mastery", "[Apply]")
     AddEmptyOption()
 
     AddHeaderOption("About")

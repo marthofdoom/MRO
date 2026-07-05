@@ -73,7 +73,7 @@ Bool   _introShown = false
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 3 AutoReadOnly
+Int Property SCRIPT_VERSION = 4 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -180,6 +180,24 @@ Function RunUpgrade(Int fromVersion)
         _mxp = fresh
     EndIf
 
+    ; v4: the CarryWeight MGEF record changed archetype (broken plain
+    ; Value Modifier -> vanilla's Peak Value Modifier). Active effect
+    ; instances in the save still run the old data, so strip the spell
+    ; everywhere; the re-grants below hand out the fixed one.
+    If fromVersion > 0 && fromVersion < 4 && MRO_CarryWeightAbility
+        If PlayerRef.HasSpell(MRO_CarryWeightAbility)
+            PlayerRef.RemoveSpell(MRO_CarryWeightAbility)
+        EndIf
+        Actor[] fols = PO3_SKSEFunctions.GetPlayerFollowers()
+        Int fi = 0
+        While fols && fi < fols.Length
+            If fols[fi] && fols[fi].HasSpell(MRO_CarryWeightAbility)
+                fols[fi].RemoveSpell(MRO_CarryWeightAbility)
+            EndIf
+            fi += 1
+        EndWhile
+    EndIf
+
     ; Re-assert everything that must survive an update: settings,
     ; abilities, and event registrations (all idempotent).
     ApplyGMSTFeatures()
@@ -282,6 +300,24 @@ EndFunction
 Bool Function NativeDRActive()
     GlobalVariable g = Game.GetFormFromFile(0x81A, "MRO.esp") as GlobalVariable
     Return g && g.GetValueInt() == 1
+EndFunction
+
+; MCM Testing button: grant REAL armor mastery levels via CSF and push
+; them to whichever DR engine is live, immediately. Real levels survive
+; the 30s heartbeat (unlike console writes to the bridge globals, which
+; it overwrites) — this is the supported way to test the DR ladder.
+; CSF has no decrement; use on a throwaway save.
+Function TestGrantArmorMastery(Bool heavy, Int levels)
+    String id = ID_LA
+    If heavy
+        id = ID_HA
+    EndIf
+    CustomSkills.IncrementSkillBy(id, levels)
+    PublishBridgeGlobals()
+    If MasteryEnabled()
+        UpdateArmorMasteryBonuses()
+    EndIf
+    UpdateArmorDRFor(PlayerRef)
 EndFunction
 
 ; ===============================================================
