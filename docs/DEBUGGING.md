@@ -71,6 +71,17 @@ bytes. The engine rejects records silently; the diff always finds it.
   only with a live byte-match first.
 - capstone (pip --user --break-system-packages) disassembles live
   dumps when hunting for relocated code.
+- **"MRO.log is missing" but the DLL loaded fine**: check skse64.log —
+  `plugin MRO.dll ... loaded correctly` means SetupLog ran, so the log
+  exists *somewhere*. On this LoreRim setup SKSE::log::log_directory()
+  resolved to `Documents/My Games/`**`Skyrim.INI`**`/SKSE/MRO.log` (an
+  sMyGamesDirectory quirk — other plugins still used "Skyrim Special
+  Edition"). `find <prefix> -iname MRO.log` finds it. The prefix for a
+  non-Steam shortcut lives under `~/.local/share/Steam/steamapps/
+  compatdata/<id>/pfx`, not the modlist folder. For a throwaway diagnostic
+  build you can force the log somewhere readable by writing a game-root-
+  relative path (`Data/SKSE/Plugins/MRO.log`, like ReadIni) — MO2's USVFS
+  redirects it to the Overwrite folder on the real filesystem.
 
 ## Crash analysis
 Crash logs: `.../compatdata/3375297225/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/SKSE/crash-*.log`.
