@@ -42,25 +42,12 @@ RE::TESGlobal* g_absorbMax = nullptr;
 RE::TESGlobal* g_nativeAbsorb = nullptr;
 
 void SetupLog() {
-    // The SKSE log dir (SKSE::log::log_directory) lands inside the Proton
-    // prefix's Documents folder — unreachable from the Linux side and from
-    // the dev sandbox. Write via a game-root-relative path instead (like
-    // ReadIni's "Data/SKSE/Plugins/MRO.ini", which works): under MO2's
-    // USVFS this redirects to the Overwrite folder, which is on the real
-    // filesystem and visible in the MO2 UI. Fall back to the SKSE dir if
-    // the relative sink can't be created.
-    std::shared_ptr<spdlog::sinks::basic_file_sink_mt> sink;
-    try {
-        sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-            "Data/SKSE/Plugins/MRO.log", true);
-    } catch (...) {
-        auto logDir = SKSE::log::log_directory();
-        if (!logDir) {
-            SKSE::stl::report_and_fail("MRO: unable to resolve any log directory");
-        }
-        sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-            (*logDir / "MRO.log").string(), true);
+    auto logDir = SKSE::log::log_directory();
+    if (!logDir) {
+        SKSE::stl::report_and_fail("MRO: unable to resolve the SKSE log directory");
     }
+    auto logPath = *logDir / "MRO.log";
+    auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
     auto logger = std::make_shared<spdlog::logger>("global", std::move(sink));
     spdlog::set_default_logger(std::move(logger));
     spdlog::set_level(spdlog::level::info);
@@ -285,12 +272,6 @@ void Handle(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
     if (heal <= 0.0f) {
         return;
     }
-
-    // Diagnostic: every applied absorb prints its inputs so MRO.log is
-    // ground truth (no health-bar reading / regen fighting needed). Walk
-    // into any fire and read these lines. Remove once absorb is verified.
-    spdlog::info("Absorb: resistAV={} resist={:.1f} fullAt={:.1f} frac={:.3f} baseMag={:.2f} heal={:.2f}",
-                 static_cast<int>(resistAV), resist, fullAt, frac, baseMag, heal);
 
     const float maxHP = avo->GetPermanentActorValue(RE::ActorValue::kHealth);
     const float curHP = avo->GetActorValue(RE::ActorValue::kHealth);
