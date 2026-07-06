@@ -11,12 +11,9 @@ Core features:
   enchantment damage as healing (1% per point, full absorb at 200%)
 - Physical DR scales past the 75% armor cap for the player and followers only,
   reaching 99% at ~2000 armor rating; the curve below 750 armor is unchanged
-- 13-skill Mastery system: unlocks at base skill 100, advances through usage.
+- 14-skill Mastery system: unlocks at base skill 100, advances through usage.
   Combat skills up to +50% damage, armor skills up to +300 armor rating,
   magic schools up to +50 effective skill, crafting up to +25%
-- Boss Readiness MCM: threat assessment for Alduin Phase 1 and Final,
-  Harkon, and Miraak; thresholds auto-adjust when World Eater's Influence
-  or Immersive Miraak Difficulty are detected
 - Live Feature Toggles MCM: resistance cap, armor DR scaling, absorb,
   carry weight, arrow recovery, cell reset
 - Vendor gold doubled from load-order values

@@ -94,14 +94,6 @@ Default: ON. Toggle in MCM > Features.</description>
               <typeDescriptor><type name="Required"/></typeDescriptor>
             </plugin>
 
-            <plugin name="Boss Readiness MCM Page">
-              <description>An MCM page assessing your readiness for Alduin (both fights), Harkon, and Miraak: level, health pool, fire resistance, and how many unresistable Drain Vitality pulses you can survive. Thresholds rise automatically if World Eater's Influence or Immersive Miraak Difficulty are detected.
-
-Purely informational - no gameplay changes.</description>
-              <files/>
-              <typeDescriptor><type name="Required"/></typeDescriptor>
-            </plugin>
-
           </plugins>
         </group>
       </optionalFileGroups>
