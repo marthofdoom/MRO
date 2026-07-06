@@ -8,3 +8,4 @@
 # Native build outputs (CI artifacts, not sources)
 /native/build/
 /native/install/
+0.7.2.png*
