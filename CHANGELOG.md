@@ -4,7 +4,12 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## v0.8.0-wip — 2026-07-06 (unreleased test build, branch v0.8.0-wip)
+## v0.8.0 — 2026-07-06
+
+Native DR and absorb hooks remain **opt-in** (MRO.ini `bPhysicalDRHook` /
+`bAbsorbHook`, default 0); the Papyrus paths ship active. Absorb's native
+path was verified in-game this build (frac 0.020/0.100/0.500 at resist
+102/110/150 — exact). Flipping the hooks on by default is a 1.0 item.
 
 ### Added (native M3 — absorb, INI-gated default OFF)
 - Elemental absorb moved into MRO.dll behind MRO.ini bAbsorbHook. Heals
