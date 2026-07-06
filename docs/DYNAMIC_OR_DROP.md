@@ -59,8 +59,13 @@ the generator's load-order scan retired. Original notes kept below.
 - Mastery action costs — derived from VANILLA Skyrim.esm AVSK records,
   not the load order; portable by construction.
 - Mastery bonuses (+300 armor etc.) — design constants, not baked scans.
-- Mod detections (World Eater's Influence, Immersive Miraak, Experience
-  DLL) — runtime file/plugin checks.
+- ~~Mod detections (World Eater's Influence, Immersive Miraak, Experience
+  DLL) — runtime file/plugin checks.~~ **The Boss Readiness page (and all
+  its boss/mod detection) was DROPPED in v0.8.0** — even with runtime
+  plugin checks the readiness thresholds were a hardcoded heuristic per
+  known boss, not a real per-load-order capability, so it misled more than
+  it helped. Truly dynamic boss detection is infeasible; removed rather
+  than shipped half-accurate.
 - Optional Experience.ini — a user-chosen optional file, clearly labeled;
   static tuning is acceptable for an optional.
 - SEQ file, FOMOD, ESL flagging — portable packaging.
