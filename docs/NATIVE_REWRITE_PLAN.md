@@ -52,7 +52,8 @@ one-handed, restoration, evasion mastery XP all accruing.
   the site, else logs and skips). Exact per-hit curve for player and
   teammates; mastery ceiling via bridge globals (0x818/0x819 published
   by Papyrus heartbeat); MRO_G_NativeDR (0x81A) stands the perk ladder
-  down. Default OFF: SKSE/Plugins/MRO.ini bPhysicalDRHook=0.
+  down. Default ON as of v0.8.2 (verified in-game): SKSE/Plugins/MRO.ini
+  bPhysicalDRHook=1; set 0 to fall back to the Papyrus ladder.
   LIVE 2026-07-04 20:00 on the user's save: self-verified E8 at
   38627+0x4A8 (site shared with another mod's trampoline — standard
   stacking, we wrap it), NativeDR handshake confirmed, Papyrus ladder
@@ -83,7 +84,8 @@ one-handed, restoration, evasion mastery XP all accruing.
   stamina/magicka. Player + teammates; elemental/magic/poison resists;
   detrimental/hostile effects only. Bridge global MRO_G_NativeAbsorb
   (0x81B) stands the Papyrus OnHit path down (re-asserted on load, same
-  as NativeDR). Default OFF: SKSE/Plugins/MRO.ini bAbsorbHook=0.
+  as NativeDR). Default ON as of v0.8.2 (verified in-game): SKSE/Plugins/
+  MRO.ini bAbsorbHook=1; set 0 to fall back to the Papyrus OnHit absorb.
   OFFSET VERIFIED LIVE 2026-07-06: `tools/verify_hook_site_live.py 34526
   0x20B E8` = MATCH on the user's running 1.6.1170 (offline verify is
   IMPOSSIBLE — Steam-DRM encrypts the on-disk exe; the static

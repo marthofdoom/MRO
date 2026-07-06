@@ -4,6 +4,18 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.8.2 — 2026-07-06
+
+### Changed
+- Native hooks now default **ON** (`bPhysicalDRHook=1`, `bAbsorbHook=1`):
+  both the physical-DR curve and elemental absorb were verified correct
+  in-game, so the exact native paths are now the shipped default and the
+  Papyrus fallbacks stand down automatically. Set either to `0` in
+  `SKSE/Plugins/MRO.ini` to revert to the Papyrus path. Each hook still
+  self-verifies its code site and falls back on an unexpected game binary.
+- MRO.dll is **byte-identical to v0.8.0/v0.8.1** (this release only flips
+  the INI defaults) — its load banner still reports the v0.8.0 build.
+
 ## v0.8.1 — 2026-07-06
 
 ### Fixed
