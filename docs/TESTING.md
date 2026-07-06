@@ -9,19 +9,33 @@ deltas afterwards — they persist in the save.
 - Active Effects UI shows "Elemental Absorb" and "Carry Weight Bonus"
   (constant self abilities with FULL names; may take one 30s heartbeat)
 - `player.getav CarryWeight` — +150 over base
-- MCM "Marth Requiem Overhaul" present (else `setstage ski_configmanagerinstance 1`)
+- MCM "marth Requiem Overhaul" present, pages Mastery + Features (else
+  `setstage ski_configmanagerinstance 1` to re-register title/tabs)
 
 ## Elemental absorb
+Native as of v0.8.0 (MRO.ini bAbsorbHook=1). First confirm the hook took —
+`Documents/My Games/Skyrim Special Edition/SKSE/MRO.log`:
+```
+Absorb site @ ID 34526 + 0x20B: E8 ?? ?? ?? ??
+Absorb hook installed (site verified: E8 at ID 34526 + 0x20B)
+Absorb hook active: MRO_G_NativeAbsorb=1, Papyrus absorb standing down
+```
+Console banner reads "absorb hook: ACTIVE". If the site byte is not E8 the
+hook logs + skips and the Papyrus OnHit path stays in control (fallback).
+Re-verify the offset live after any game update:
+`tools/verify_hook_site_live.py 34526 0x20B E8`.
 ```
 player.getav FireResist
 player.modav FireResist 150        ; well past 100
 player.damageav Health 200
 player.cast 12FCD player right     ; Firebolt at self
 ```
-Health goes UP on the hit. Controls: at exactly 100 → no damage, no heal;
-MCM toggle off → no heal. Overflow: at full health, the heal spills into
-stamina/magicka (watch those bars). MCM Features > Live Status shows
-"(absorbs N%)" per element while over 100.
+Health goes UP on the hit — and, unlike the old Papyrus version (authored
+base magnitude, barely visible), the native heal uses the REAL per-hit
+magnitude, so it is clearly visible. Controls: at exactly 100 → no damage,
+no heal; MCM toggle off → no heal. Overflow: at full health, the heal
+spills into stamina/magicka (watch those bars). MCM Features > Live Status
+shows "(absorbs N%)" per element while over 100.
 
 ## Physical DR ladder
 ```
@@ -37,7 +51,9 @@ within 30s. Cleanup: `player.modav DamageResist -1000`.
 - Swing at air / a rock / a corpse / a follower: NO progress (MCM Mastery
   page percentages unchanged).
 - Land hits on a hostile enemy with base skill >= 100: progress ticks;
-  level-up shows the vanilla-style skill-increase banner.
+  level-up shows the CSF skill-increase banner AND a corner notification
+  ("<Skill> Mastery increased to N") with the vanilla skill-up sound.
+  Hovering a mastery row shows that skill's live bonus in the info bar.
 - Casting spells out of combat: no school XP; in combat: XP per cast.
 - Crafting menus and barter menus grant session XP (skill >= 100 only).
 

@@ -69,8 +69,26 @@ one-handed, restoration, evasion mastery XP all accruing.
   levels via IncrementSkillBy) because the 30s heartbeat overwrites
   console writes to the bridge globals by design.
   Combat stress test pending; then retire ladder perk records.
-- **M3 resist/absorb hook** (ResistancesRescaled pattern): same
-  flag-gated rollout. Retire MRO_AbsorbMGEF heal path.
+- **M3 elemental absorb** — IMPLEMENTED 2026-07-06 (v0.8.0-wip), awaiting
+  in-game verification. Call thunk at po3 PapyrusExtender's magicApply
+  site (`RELOCATION_ID(33742, 34526)`, AE offset `0x20B`), `write_call<5>`
+  with SELF-VERIFYING install (E8 opcode required, else logs + skips) and
+  logs the raw site bytes to MRO.log. Runs the original AddTarget first,
+  then heals: reads the pre-resistance magnitude straight off
+  `AddTargetData::magnitude` (0x3C) — the caster's skill/perk/dual-cast-
+  scaled damage at 0% resist — which the Papyrus OnHit version could not
+  see (it only had the spell's authored base magnitude, so absorb read
+  "too small to see"). Formula unchanged: heal = mag *
+  (resist-100)/(fullAt-100), capped 1.0; spill past full HP goes 50/50 to
+  stamina/magicka. Player + teammates; elemental/magic/poison resists;
+  detrimental/hostile effects only. Bridge global MRO_G_NativeAbsorb
+  (0x81B) stands the Papyrus OnHit path down (re-asserted on load, same
+  as NativeDR). Default OFF: SKSE/Plugins/MRO.ini bAbsorbHook=0.
+  OFFSET VERIFIED LIVE 2026-07-06: `tools/verify_hook_site_live.py 34526
+  0x20B E8` = MATCH on the user's running 1.6.1170 (offline verify is
+  IMPOSSIBLE — Steam-DRM encrypts the on-disk exe; the static
+  verify_hook_site.py reads garbage. Always use the _live variant against
+  the running process for AE hook sites).
 - **M4 cleanup**: Papyrus keeps MCM/mastery; MCM toggles write an INI or
   globals the DLL reads.
 

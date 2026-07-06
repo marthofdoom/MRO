@@ -4,6 +4,64 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.8.0 — 2026-07-06
+
+Native DR and absorb hooks remain **opt-in** (MRO.ini `bPhysicalDRHook` /
+`bAbsorbHook`, default 0); the Papyrus paths ship active. Absorb's native
+path was verified in-game this build (frac 0.020/0.100/0.500 at resist
+102/110/150 — exact). Flipping the hooks on by default is a 1.0 item.
+
+### Added (native M3 — absorb, INI-gated default OFF)
+- Elemental absorb moved into MRO.dll behind MRO.ini bAbsorbHook. Heals
+  from the REAL per-hit pre-resistance magnitude (skill/perk/dual-cast-
+  scaled) at po3's magicApply call site (AL 34526 + 0x20B, self-verifying
+  E8, logs site bytes). The Papyrus OnHit path only saw a spell's authored
+  base magnitude, so absorb read too small to notice. Formula unchanged.
+  Bridge global MRO_G_NativeAbsorb (0x81B) stands the Papyrus path down.
+  Offset MATCH-verified live on 1.6.1170. See docs/NATIVE_REWRITE_PLAN.md.
+- Absorb now qualifies effects by archetype (value-modifier damage only),
+  not just by resist flag. Requiem's frost (stamina) and shock (magicka)
+  drains still absorb, but fire/frost-flagged hazards, script effects and
+  staggers — the noise a QA trap cell (coc warehousetraps) spams — no
+  longer grant healing.
+
+### Added (mastery)
+- Per-skill mastery XP-speed sliders (14) in the MCM; weapon skills
+  default 2.5x (they train slower than armor/magic). Globals 0x870-0x87D.
+- Illusion and Alteration now accrue mastery XP out of combat (utility
+  schools); Destruction/Restoration/Conjuration still require combat.
+- Mastery level-up now fires a corner notification + the vanilla skill-up
+  sound (UISkillIncrease 0x018538) — CSF's own message was too subtle.
+- Hovering a mastery skill row shows its live bonus in the MCM info bar.
+
+### Removed
+- Boss Readiness page dropped entirely (vanilla + content-mod detection).
+  It was a hardcoded heuristic, not reliably dynamic per load order, so it
+  told players little of value. MCM is now Mastery + Features.
+
+### Changed
+- "marth" is lowercase everywhere (MCM title + quest messages), per brand.
+
+## v0.7.2 — 2026-07-05
+
+### Fixed
+- Native DR handshake: MRO_G_NativeDR=1 was clobbered on save load
+  (GlobalVariable values are save-persisted), so the MCM showed "Perk
+  Ladder" and Papyrus never stood down though the hook was live. Now
+  re-asserted on kPostLoadGame/kNewGame.
+- Carry weight NEVER worked: the fortify MGEF used archetype 0 (Value
+  Modifier), which silently no-ops for fortify-from-ability. Now archetype
+  34 (Peak Value Modifier) with DATA[48]=0.5, copied byte-for-byte from
+  vanilla AbFortifyCarryWeight. Script v4 strips + re-grants the ability
+  on existing saves so save-resident effect instances pick up the fix.
+- MCM toggles only updated on menu re-entry: repaints were routed through
+  the quest, which blocks on the 30s heartbeat's instance lock. Toggles
+  now flip the global + repaint locally, then nudge the quest.
+- Mastery levels NEVER leveled (since 0.5.1): CSF's Skill::Increment is a
+  silent no-op without a "level" GlobalVariable binding in the skill JSON
+  (and hard-caps at 100). MRO now owns 28 level/ratio globals (0x850-0x86D)
+  bound in the JSONs and SetValue's them directly; CSF only reads.
+
 ## v0.7.0 — 2026-07-05
 
 ### Added (native M2 — SHIPPED OFF BY DEFAULT)

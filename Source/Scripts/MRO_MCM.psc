@@ -3,11 +3,7 @@ Scriptname MRO_MCM extends SKI_ConfigBase
 Quest           Property MRO_Quest              Auto
 
 ; Stamped by release.sh — do not edit by hand
-String Property MRO_VERSION = "0.7.2" AutoReadOnly
-Quest           Property MQ206_AlduinsBane      Auto
-Quest           Property MQ305_Sovngarde        Auto
-Quest           Property DLC1VQ08_Harkon        Auto
-Quest           Property DLC2MQ06_Miraak        Auto
+String Property MRO_VERSION = "0.8.0" AutoReadOnly
 
 GlobalVariable  Property MRO_MasteryEnabled     Auto
 GlobalVariable  Property MRO_MasteryBaseGrant   Auto
@@ -41,33 +37,30 @@ Int _oidArmorMastB  = -1
 Int _oidWeapMastB   = -1
 Int _oidXPSpeed     = -1
 
+; Per-skill XP-speed slider OIDs, index = SkillIndex order (0-13)
+Int[] _oidXpm
+
+; Mastery skill-row OIDs, index = SkillIndex order (0-13). Highlight shows
+; that skill's current bonus in the bottom bar.
+Int[] _oidSkill
+
 ; Testing buttons
 Int _oidTestLA      = -1
 Int _oidTestHA      = -1
-
-; Boss readiness rows (for highlight info)
-Int _oidDrain       = -1
-Int _oidAldP1       = -1
-Int _oidAldFinal    = -1
-Int _oidHarkon      = -1
-Int _oidMiraak      = -1
 
 ; ==========================================================
 ; INIT
 ; ==========================================================
 
 Event OnConfigInit()
-    ModName = "Marth Requiem Overhaul"
-    Pages = new String[3]
-    Pages[0] = "Boss Readiness"
-    Pages[1] = "Mastery"
-    Pages[2] = "Features"
+    ModName = "marth Requiem Overhaul"
+    Pages = new String[2]
+    Pages[0] = "Mastery"
+    Pages[1] = "Features"
 EndEvent
 
 Event OnPageReset(String a_page)
-    If a_page == "Boss Readiness"
-        RenderBossReadiness()
-    ElseIf a_page == "Mastery"
+    If a_page == "Mastery"
         RenderMastery()
     ElseIf a_page == "Features"
         RenderFeatures()
@@ -178,6 +171,16 @@ Event OnOptionSliderOpen(Int a_option)
         SliderSetup(MRO_T_WeaponMasteryBonus, 50.0, 0.0, 100.0, 5.0)
     ElseIf a_option == _oidXPSpeed
         SliderSetup(MRO_MasteryBaseGrant, 1.0, 0.25, 4.0, 0.25)
+    Else
+        Int xi = XpmIndexOf(a_option)
+        If xi >= 0
+            MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+            Float def = 1.0
+            If xi < 3
+                def = 2.5   ; weapon skills default faster
+            EndIf
+            SliderSetup(q.XPSpeedGlobalByIndex(xi), def, 0.25, 5.0, 0.25)
+        EndIf
     EndIf
 EndEvent
 
@@ -208,6 +211,13 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     ElseIf a_option == _oidXPSpeed
         gv = MRO_MasteryBaseGrant
         fmt = "{2}"
+    Else
+        Int xi = XpmIndexOf(a_option)
+        If xi >= 0
+            MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+            gv = q.XPSpeedGlobalByIndex(xi)
+            fmt = "{2}x"
+        EndIf
     EndIf
     If gv
         gv.SetValue(a_value)
@@ -250,88 +260,15 @@ Event OnOptionHighlight(Int a_option)
         SetInfoText("Global mastery XP speed multiplier. 2 = levels twice as fast, 0.5 = half speed.")
     ElseIf a_option == _oidTestLA || a_option == _oidTestHA
         SetInfoText("TEST BUTTON: permanently grants 25 REAL mastery levels via Custom Skills Framework (no way to remove them - throwaway saves only). Levels publish to the DR engine immediately; wear a matching chest piece and check Live Status.")
-    ElseIf a_option == _oidDrain
-        SetInfoText("Alduin's Drain Vitality is UNRESISTABLE and drains ~25 HP per pulse. Raw HP is the only defense - resistances do not help.")
-    ElseIf a_option == _oidAldP1
-        SetInfoText("Throat of the World. Threats: Fire Breath (fire resist), unresistable Drain Vitality, physical hits with 30% armor penetration. Want HP 400+, fire resist 50%+.")
-    ElseIf a_option == _oidAldFinal
-        SetInfoText("Sovngarde. Same threats as Phase 1 but harder; dragon priests assist. HP and potion stock matter more than fire resist.")
-    ElseIf a_option == _oidHarkon
-        SetInfoText("Kindred Judgment. Bring silver or Auriel's Bow; HP 450+ recommended.")
-    ElseIf a_option == _oidMiraak
-        SetInfoText("Summit of Apocrypha. Long multi-phase fight - HP 500+, Stamina 200+, bring supplies.")
+    ElseIf XpmIndexOf(a_option) >= 0
+        SetInfoText("XP-speed multiplier for THIS mastery only. 2.5 = 2.5x faster to the next level. Weapon skills default to 2.5 (they train slower than armor/magic); everything else defaults to 1.")
+    ElseIf MasteryOidIndex(a_option) >= 0
+        MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+        If q
+            SetInfoText(q.GetMasteryHoverTextByIndex(MasteryOidIndex(a_option)))
+        EndIf
     EndIf
 EndEvent
-
-; ==========================================================
-; BOSS READINESS PAGE
-; ==========================================================
-
-Function RenderBossReadiness()
-    Actor player    = Game.GetPlayer()
-    Int   level     = player.GetLevel()
-    Float hp        = player.GetActorValue("Health")
-    Float fireRes   = player.GetActorValue("FireResist")
-    Float magRes    = player.GetActorValue("MagicResist")
-    Int   drainPulses = (hp / 25.0) as Int
-
-    SetCursorFillMode(TOP_TO_BOTTOM)
-
-    AddHeaderOption("Your Stats")
-    AddTextOption("Level",          level as String)
-    AddTextOption("Health",         (hp as Int) as String)
-    AddTextOption("Fire Resist",    ((fireRes as Int) as String) + "%")
-    AddTextOption("Magic Resist",   ((magRes as Int) as String) + "%")
-    _oidDrain = AddTextOption("Drain Pulses", "~" + (drainPulses as String) + " Survivable")
-    AddEmptyOption()
-
-    AddHeaderOption("Alduin - Throat of the World")
-    _oidAldP1 = AddTextOption("Status", AlduinPhase1Status(level, hp, fireRes))
-    AddTextOption("Target", "L30-40, HP 400+")
-    AddEmptyOption()
-
-    Bool alduinBuffed = IsAlduinBuffed()
-    String aldTarget = "L35-45, HP 450+"
-    If alduinBuffed
-        aldTarget = "L42-52, HP 525+"
-    EndIf
-    AddHeaderOption("Alduin - Sovngarde")
-    _oidAldFinal = AddTextOption("Status", AlduinFinalStatus(level, hp, fireRes, alduinBuffed))
-    AddTextOption("Target", aldTarget)
-    If alduinBuffed
-        AddTextOption("Modifier", "World Eater's Influence")
-    EndIf
-    AddEmptyOption()
-
-    If DLC1VQ08_Harkon
-        AddHeaderOption("Harkon")
-        _oidHarkon = AddTextOption("Status", HarkonStatus(level, hp))
-        AddTextOption("Target", "L40-50, HP 450+")
-        AddEmptyOption()
-    EndIf
-
-    If DLC2MQ06_Miraak
-        Bool miraakMod = IsMiraakModified()
-        String mirTarget = "L45-55, HP 500+"
-        If miraakMod
-            mirTarget = "L52-62, HP 575+"
-        EndIf
-        AddHeaderOption("Miraak")
-        _oidMiraak = AddTextOption("Status", MiraakStatus(level, hp, miraakMod))
-        AddTextOption("Target", mirTarget)
-        If miraakMod
-            AddTextOption("Modifier", "Immersive Miraak")
-        EndIf
-        AddEmptyOption()
-    EndIf
-
-    AddHeaderOption("Detected Mods")
-    String expStatus = "Not Detected"
-    If MiscUtil.FileExists("data/skse/plugins/Experience.dll")
-        expStatus = "Detected (XP-Based Leveling)"
-    EndIf
-    AddTextOption("Experience", expStatus)
-EndFunction
 
 ; ==========================================================
 ; MASTERY PAGE
@@ -359,38 +296,58 @@ Function RenderMastery()
     AddEmptyOption()
 
     If q
+        _oidSkill = new Int[14]
         AddHeaderOption("Combat")
-        RenderSkillRow(q, "One-Handed",  q.ID_OH)
-        RenderSkillRow(q, "Two-Handed",  q.ID_TH)
-        RenderSkillRow(q, "Archery",     q.ID_MK)
+        RenderSkillRow(q, "One-Handed",  q.ID_OH, 0)
+        RenderSkillRow(q, "Two-Handed",  q.ID_TH, 1)
+        RenderSkillRow(q, "Archery",     q.ID_MK, 2)
         AddEmptyOption()
 
         AddHeaderOption("Defense")
-        RenderSkillRow(q, "Evasion",     q.ID_LA)
-        RenderSkillRow(q, "Heavy Armor", q.ID_HA)
+        RenderSkillRow(q, "Evasion",     q.ID_LA, 3)
+        RenderSkillRow(q, "Heavy Armor", q.ID_HA, 4)
         AddEmptyOption()
 
         AddHeaderOption("Magic")
-        RenderSkillRow(q, "Destruction", q.ID_DS)
-        RenderSkillRow(q, "Restoration", q.ID_RS)
-        RenderSkillRow(q, "Alteration",  q.ID_AL)
-        RenderSkillRow(q, "Conjuration", q.ID_CJ)
-        RenderSkillRow(q, "Illusion",    q.ID_IL)
+        RenderSkillRow(q, "Destruction", q.ID_DS, 5)
+        RenderSkillRow(q, "Restoration", q.ID_RS, 6)
+        RenderSkillRow(q, "Alteration",  q.ID_AL, 7)
+        RenderSkillRow(q, "Conjuration", q.ID_CJ, 8)
+        RenderSkillRow(q, "Illusion",    q.ID_IL, 9)
         AddEmptyOption()
 
         AddHeaderOption("Crafting")
-        RenderSkillRow(q, "Smithing",    q.ID_SM)
-        RenderSkillRow(q, "Alchemy",     q.ID_AC)
-        RenderSkillRow(q, "Enchanting",  q.ID_EN)
+        RenderSkillRow(q, "Smithing",    q.ID_SM, 10)
+        RenderSkillRow(q, "Alchemy",     q.ID_AC, 11)
+        RenderSkillRow(q, "Enchanting",  q.ID_EN, 12)
         AddEmptyOption()
 
         AddHeaderOption("Commerce")
-        RenderSkillRow(q, "Speech",      q.ID_SP)
+        RenderSkillRow(q, "Speech",      q.ID_SP, 13)
+        AddEmptyOption()
+
+        AddHeaderOption("XP Speed (per skill)")
+        _oidXpm = new Int[14]
+        RenderXpmSlider(q, "One-Handed",  0)
+        RenderXpmSlider(q, "Two-Handed",  1)
+        RenderXpmSlider(q, "Archery",     2)
+        RenderXpmSlider(q, "Evasion",     3)
+        RenderXpmSlider(q, "Heavy Armor", 4)
+        RenderXpmSlider(q, "Destruction", 5)
+        RenderXpmSlider(q, "Restoration", 6)
+        RenderXpmSlider(q, "Alteration",  7)
+        RenderXpmSlider(q, "Conjuration", 8)
+        RenderXpmSlider(q, "Illusion",    9)
+        RenderXpmSlider(q, "Smithing",    10)
+        RenderXpmSlider(q, "Alchemy",     11)
+        RenderXpmSlider(q, "Enchanting",  12)
+        RenderXpmSlider(q, "Speech",      13)
     EndIf
 EndFunction
 
-; One compact row per skill: "level/cap +bonus% (progress% to next)"
-Function RenderSkillRow(MRO_StartupQuest q, String label, String skillId)
+; One compact row per skill: "level/cap +bonus% (progress% to next)".
+; Highlighting the row shows its live bonus in the bottom bar.
+Function RenderSkillRow(MRO_StartupQuest q, String label, String skillId, Int idx)
     Int lvl    = q.GetMasteryLevel(skillId)
     Int capInt = q.GetMasteryCap() as Int
     Int pct    = q.GetMasteryBonusPct(skillId) as Int
@@ -399,7 +356,46 @@ Function RenderSkillRow(MRO_StartupQuest q, String label, String skillId)
     If lvl < capInt
         v += " (" + (prog as String) + "%)"
     EndIf
-    AddTextOption(label, v)
+    _oidSkill[idx] = AddTextOption(label, v)
+EndFunction
+
+; Returns the SkillIndex for a mastery skill-row oid, or -1 if not one.
+Int Function MasteryOidIndex(Int a_option)
+    If !_oidSkill
+        Return -1
+    EndIf
+    Int i = 0
+    While i < 14
+        If _oidSkill[i] == a_option
+            Return i
+        EndIf
+        i += 1
+    EndWhile
+    Return -1
+EndFunction
+
+Function RenderXpmSlider(MRO_StartupQuest q, String label, Int idx)
+    Float cur = 1.0
+    GlobalVariable g = q.XPSpeedGlobalByIndex(idx)
+    If g
+        cur = g.GetValue()
+    EndIf
+    _oidXpm[idx] = AddSliderOption(label, cur, "{2}x")
+EndFunction
+
+; Returns the SkillIndex for an XP-speed slider oid, or -1 if not one.
+Int Function XpmIndexOf(Int a_option)
+    If !_oidXpm
+        Return -1
+    EndIf
+    Int i = 0
+    While i < 14
+        If _oidXpm[i] == a_option
+            Return i
+        EndIf
+        i += 1
+    EndWhile
+    Return -1
 EndFunction
 
 ; ==========================================================
@@ -519,76 +515,4 @@ String Function ResistStatus(Actor player, String av)
         s += " (absorbs " + ((frac * 100.0) as Int) + "%)"
     EndIf
     Return s
-EndFunction
-
-; ==========================================================
-; READINESS CALCULATIONS
-; ==========================================================
-
-String Function AlduinPhase1Status(Int level, Float hp, Float fireRes)
-    If MQ206_AlduinsBane && MQ206_AlduinsBane.IsCompleted()
-        Return "COMPLETED"
-    EndIf
-    If level >= 30 && hp >= 400.0 && fireRes >= 50.0
-        Return "READY"
-    ElseIf level >= 24 || hp >= 250.0
-        Return "CAUTION"
-    EndIf
-    Return "NOT READY"
-EndFunction
-
-String Function AlduinFinalStatus(Int level, Float hp, Float fireRes, Bool alduinBuffed)
-    If MQ305_Sovngarde && MQ305_Sovngarde.IsCompleted()
-        Return "COMPLETED"
-    EndIf
-    Int   minLevel = 35
-    Float minHP    = 450.0
-    If alduinBuffed
-        minLevel = 42
-        minHP    = 525.0
-    EndIf
-    If level >= minLevel && hp >= minHP && fireRes >= 50.0
-        Return "READY"
-    ElseIf level >= (minLevel - 5) || hp >= 300.0
-        Return "CAUTION"
-    EndIf
-    Return "NOT READY"
-EndFunction
-
-String Function HarkonStatus(Int level, Float hp)
-    If DLC1VQ08_Harkon && DLC1VQ08_Harkon.IsCompleted()
-        Return "COMPLETED"
-    EndIf
-    If level >= 40 && hp >= 450.0
-        Return "READY"
-    ElseIf level >= 35 || hp >= 300.0
-        Return "CAUTION"
-    EndIf
-    Return "NOT READY"
-EndFunction
-
-String Function MiraakStatus(Int level, Float hp, Bool miraakModified)
-    If DLC2MQ06_Miraak && DLC2MQ06_Miraak.IsCompleted()
-        Return "COMPLETED"
-    EndIf
-    Int   minLevel = 45
-    Float minHP    = 500.0
-    If miraakModified
-        minLevel = 52
-        minHP    = 575.0
-    EndIf
-    If level >= minLevel && hp >= minHP
-        Return "READY"
-    ElseIf level >= (minLevel - 7) || hp >= 350.0
-        Return "CAUTION"
-    EndIf
-    Return "NOT READY"
-EndFunction
-
-Bool Function IsAlduinBuffed()
-    Return Game.IsPluginInstalled("World Eater's Influence.esp")
-EndFunction
-
-Bool Function IsMiraakModified()
-    Return Game.IsPluginInstalled("ImmersiveMiraakDifficulty.esp")
 EndFunction

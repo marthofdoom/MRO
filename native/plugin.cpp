@@ -26,14 +26,20 @@ constexpr std::uint32_t kFidLAFrac = 0x818;
 constexpr std::uint32_t kFidHAFrac = 0x819;
 constexpr std::uint32_t kFidNativeDR = 0x81A;
 constexpr std::uint32_t kFidDR99Armor = 0x813;
+constexpr std::uint32_t kFidAbsorbMax = 0x812;      // resist at which absorb = 100% (default 200)
+constexpr std::uint32_t kFidNativeAbsorb = 0x81B;   // DLL->Papyrus: 1 when absorb hook is live
 
 bool g_drHookWanted = false;    // from MRO.ini
 bool g_drHookLive = false;      // site verified + thunk installed
+bool g_absorbHookWanted = false;
+bool g_absorbHookLive = false;
 
 RE::TESGlobal* g_laFrac = nullptr;
 RE::TESGlobal* g_haFrac = nullptr;
 RE::TESGlobal* g_nativeDR = nullptr;
 RE::TESGlobal* g_dr99 = nullptr;
+RE::TESGlobal* g_absorbMax = nullptr;
+RE::TESGlobal* g_nativeAbsorb = nullptr;
 
 void SetupLog() {
     auto logDir = SKSE::log::log_directory();
@@ -56,8 +62,13 @@ void ReadIni() {
             line.find('=') != std::string::npos) {
             g_drHookWanted = line.find('1', line.find('=')) != std::string::npos;
         }
+        if (line.find("bAbsorbHook") != std::string::npos &&
+            line.find('=') != std::string::npos) {
+            g_absorbHookWanted = line.find('1', line.find('=')) != std::string::npos;
+        }
     }
-    spdlog::info("MRO.ini: bPhysicalDRHook={}", g_drHookWanted ? 1 : 0);
+    spdlog::info("MRO.ini: bPhysicalDRHook={} bAbsorbHook={}",
+                 g_drHookWanted ? 1 : 0, g_absorbHookWanted ? 1 : 0);
 }
 
 void DoubleVendorGold() {
@@ -164,6 +175,153 @@ bool Install() {
 
 }  // namespace PhysicalDR
 
+// ── M3: elemental absorb from the REAL per-hit magnitude ─────────────
+// The Papyrus OnHit version could only read a spell's authored base
+// magnitude (too small to see). This hooks the magic-effect apply site
+// (po3's magicApply site, AL ID 34526 + 0x20B) so it sees the caster's
+// skill/perk/dual-cast-scaled pre-resistance magnitude — the damage the
+// hit would deal at 0% resist. Heal = magnitude * (resist-100)/(fullAt-
+// 100), capped at 100%; spillover past full health goes half to stamina,
+// half to magicka. Player and teammates only. Only genuine value-modifier
+// damage qualifies (IsDamagingArchetype), so fire/frost-flagged hazards
+// and script effects don't grant absorb. Self-verifies the E8 call opcode
+// at install; INI-gated (bAbsorbHook), default OFF.
+namespace Absorb {
+
+bool IsAbsorbableResist(RE::ActorValue av) {
+    switch (av) {
+    case RE::ActorValue::kResistFire:
+    case RE::ActorValue::kResistFrost:
+    case RE::ActorValue::kResistShock:
+    case RE::ActorValue::kResistMagic:
+    case RE::ActorValue::kPoisonResist:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// The effect must actually DEAL resource damage, not merely be flagged
+// with an elemental resist. Requiem's elements hit different resources
+// (fire->health, frost->stamina, shock->magicka), so we canNOT filter on
+// the target actor value; instead require a value-modifier archetype.
+// This drops the fire/frost-flagged hazard-spawners, script effects and
+// staggers that a QA trap cell (coc warehousetraps) throws at the player,
+// while keeping every genuine elemental damage effect regardless of which
+// resource it drains.
+bool IsDamagingArchetype(const RE::EffectSetting* base) {
+    const auto at = base->data.archetype;
+    return at == RE::EffectSetting::Archetype::kValueModifier ||
+           at == RE::EffectSetting::Archetype::kDualValueModifier;
+}
+
+void Handle(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
+    if (!g_absorbHookLive || !a_this || !a_data) {
+        return;
+    }
+    auto* refr = a_this->GetTargetStatsObject();  // returns TESObjectREFR*
+    if (!refr || !a_this->MagicTargetIsActor()) {
+        return;
+    }
+    auto* victim = static_cast<RE::Actor*>(refr);
+    if (!victim->IsPlayerRef() && !victim->IsPlayerTeammate()) {
+        return;
+    }
+    const auto* effect = a_data->effect;
+    const auto* base = effect ? effect->baseEffect : nullptr;
+    if (!base) {
+        return;
+    }
+    const RE::ActorValue resistAV = base->data.resistVariable;
+    if (!IsAbsorbableResist(resistAV)) {
+        return;
+    }
+    // Only detrimental/hostile effects heal (a fortify that happens to
+    // carry a resist AV must never grant absorb).
+    if (!base->IsDetrimental() && !base->IsHostile()) {
+        return;
+    }
+    // ...and only real resource-damage effects, not fire-flagged
+    // hazards/scripts/staggers (see IsDamagingArchetype).
+    if (!IsDamagingArchetype(base)) {
+        return;
+    }
+
+    auto* avo = victim->AsActorValueOwner();
+    if (!avo) {
+        return;
+    }
+    const float resist = avo->GetActorValue(resistAV);
+    if (resist <= 100.0f) {
+        return;
+    }
+    const float baseMag = a_data->magnitude;   // pre-resistance (0% resist damage)
+    if (baseMag <= 0.0f) {
+        return;
+    }
+
+    float fullAt = g_absorbMax ? g_absorbMax->value : 200.0f;
+    if (fullAt <= 100.0f) {
+        fullAt = 200.0f;
+    }
+    float frac = (resist - 100.0f) / (fullAt - 100.0f);
+    if (frac > 1.0f) {
+        frac = 1.0f;
+    }
+    const float heal = baseMag * frac;
+    if (heal <= 0.0f) {
+        return;
+    }
+
+    const float maxHP = avo->GetPermanentActorValue(RE::ActorValue::kHealth);
+    const float curHP = avo->GetActorValue(RE::ActorValue::kHealth);
+    float missing = maxHP - curHP;
+    if (missing < 0.0f) {
+        missing = 0.0f;
+    }
+    const float toHealth = heal < missing ? heal : missing;
+    if (toHealth > 0.0f) {
+        avo->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, toHealth);
+    }
+    const float overflow = heal - toHealth;
+    if (overflow > 0.0f) {
+        avo->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, overflow * 0.5f);
+        avo->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, overflow * 0.5f);
+    }
+}
+
+struct ApplyThunk {
+    static bool thunk(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
+        const bool applied = func(a_this, a_data);  // apply the effect first
+        Handle(a_this, a_data);                     // then absorb, if any
+        return applied;
+    }
+    static inline REL::Relocation<decltype(thunk)> func;
+};
+
+bool Install() {
+    const REL::Relocation<std::uintptr_t> target{ REL::ID(34526), 0x20B };
+    const auto* site = reinterpret_cast<std::uint8_t*>(target.address());
+    // Steam-DRM encrypts the on-disk exe, so this offset (po3's magicApply
+    // site) can only be confirmed against decrypted runtime memory. Log the
+    // real bytes so MRO.log is ground truth on first launch.
+    spdlog::info("Absorb site @ ID 34526 + 0x20B: {:02X} {:02X} {:02X} {:02X} {:02X}",
+                 site[0], site[1], site[2], site[3], site[4]);
+    if (site[0] != 0xE8) {
+        spdlog::error(
+            "Absorb hook site check FAILED: expected E8 call, found {:02X}. Hook NOT installed "
+            "(offset stale for this runtime — absorb falls back to the Papyrus OnHit version).",
+            site[0]);
+        return false;
+    }
+    auto& trampoline = SKSE::GetTrampoline();
+    ApplyThunk::func = trampoline.write_call<5>(target.address(), ApplyThunk::thunk);
+    spdlog::info("Absorb hook installed (site verified: E8 at ID 34526 + 0x20B)");
+    return true;
+}
+
+}  // namespace Absorb
+
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     switch (message->type) {
     case SKSE::MessagingInterface::kDataLoaded: {
@@ -175,15 +333,22 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_haFrac = dh->LookupForm<RE::TESGlobal>(kFidHAFrac, "MRO.esp");
             g_nativeDR = dh->LookupForm<RE::TESGlobal>(kFidNativeDR, "MRO.esp");
             g_dr99 = dh->LookupForm<RE::TESGlobal>(kFidDR99Armor, "MRO.esp");
+            g_absorbMax = dh->LookupForm<RE::TESGlobal>(kFidAbsorbMax, "MRO.esp");
+            g_nativeAbsorb = dh->LookupForm<RE::TESGlobal>(kFidNativeAbsorb, "MRO.esp");
         }
         if (g_drHookLive && g_nativeDR) {
             g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
             spdlog::info("DR hook active: MRO_G_NativeDR=1, Papyrus ladder standing down");
         }
+        if (g_absorbHookLive && g_nativeAbsorb) {
+            g_nativeAbsorb->value = 1.0f;  // tells the Papyrus OnHit absorb to stand down
+            spdlog::info("Absorb hook active: MRO_G_NativeAbsorb=1, Papyrus absorb standing down");
+        }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.7.2 loaded (DR hook: %s)",
-                           g_drHookLive ? "ACTIVE" : "off");
+            console->Print("MRO native v0.8.0 loaded (DR hook: %s, absorb hook: %s)",
+                           g_drHookLive ? "ACTIVE" : "off",
+                           g_absorbHookLive ? "ACTIVE" : "off");
         }
         break;
     }
@@ -198,6 +363,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_nativeDR->value = 1.0f;
             spdlog::info("post-load: MRO_G_NativeDR re-asserted to 1");
         }
+        if (g_absorbHookLive && g_nativeAbsorb) {
+            g_nativeAbsorb->value = 1.0f;
+            spdlog::info("post-load: MRO_G_NativeAbsorb re-asserted to 1");
+        }
         break;
     default:
         break;
@@ -211,15 +380,20 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.7.2 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.8.0 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }
 
     ReadIni();
+    if (g_drHookWanted || g_absorbHookWanted) {
+        SKSE::AllocTrampoline(128);
+    }
     if (g_drHookWanted) {
-        SKSE::AllocTrampoline(64);
         g_drHookLive = PhysicalDR::Install();
+    }
+    if (g_absorbHookWanted) {
+        g_absorbHookLive = Absorb::Install();
     }
 
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
