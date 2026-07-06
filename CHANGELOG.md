@@ -14,6 +14,11 @@ deleted or overwritten.
   base magnitude, so absorb read too small to notice. Formula unchanged.
   Bridge global MRO_G_NativeAbsorb (0x81B) stands the Papyrus path down.
   Offset MATCH-verified live on 1.6.1170. See docs/NATIVE_REWRITE_PLAN.md.
+- Absorb now qualifies effects by archetype (value-modifier damage only),
+  not just by resist flag. Requiem's frost (stamina) and shock (magicka)
+  drains still absorb, but fire/frost-flagged hazards, script effects and
+  staggers — the noise a QA trap cell (coc warehousetraps) spams — no
+  longer grant healing.
 
 ### Added (mastery)
 - Per-skill mastery XP-speed sliders (14) in the MCM; weapon skills

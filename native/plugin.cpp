@@ -182,8 +182,10 @@ bool Install() {
 // skill/perk/dual-cast-scaled pre-resistance magnitude — the damage the
 // hit would deal at 0% resist. Heal = magnitude * (resist-100)/(fullAt-
 // 100), capped at 100%; spillover past full health goes half to stamina,
-// half to magicka. Player and teammates only. Self-verifies the E8 call
-// opcode at install; INI-gated (bAbsorbHook), default OFF.
+// half to magicka. Player and teammates only. Only genuine value-modifier
+// damage qualifies (IsDamagingArchetype), so fire/frost-flagged hazards
+// and script effects don't grant absorb. Self-verifies the E8 call opcode
+// at install; INI-gated (bAbsorbHook), default OFF.
 namespace Absorb {
 
 bool IsAbsorbableResist(RE::ActorValue av) {
@@ -197,6 +199,20 @@ bool IsAbsorbableResist(RE::ActorValue av) {
     default:
         return false;
     }
+}
+
+// The effect must actually DEAL resource damage, not merely be flagged
+// with an elemental resist. Requiem's elements hit different resources
+// (fire->health, frost->stamina, shock->magicka), so we canNOT filter on
+// the target actor value; instead require a value-modifier archetype.
+// This drops the fire/frost-flagged hazard-spawners, script effects and
+// staggers that a QA trap cell (coc warehousetraps) throws at the player,
+// while keeping every genuine elemental damage effect regardless of which
+// resource it drains.
+bool IsDamagingArchetype(const RE::EffectSetting* base) {
+    const auto at = base->data.archetype;
+    return at == RE::EffectSetting::Archetype::kValueModifier ||
+           at == RE::EffectSetting::Archetype::kDualValueModifier;
 }
 
 void Handle(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
@@ -223,6 +239,11 @@ void Handle(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
     // Only detrimental/hostile effects heal (a fortify that happens to
     // carry a resist AV must never grant absorb).
     if (!base->IsDetrimental() && !base->IsHostile()) {
+        return;
+    }
+    // ...and only real resource-damage effects, not fire-flagged
+    // hazards/scripts/staggers (see IsDamagingArchetype).
+    if (!IsDamagingArchetype(base)) {
         return;
     }
 
@@ -325,7 +346,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.7.2 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.8.0 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -359,7 +380,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.7.2 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.8.0 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }
