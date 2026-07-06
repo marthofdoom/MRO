@@ -4,6 +4,15 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.8.1 — 2026-07-06
+
+### Fixed
+- FOMOD installer still advertised the Boss Readiness MCM page (dropped in
+  v0.8.0). Removed it from the installer text and info.xml; "13-skill" ->
+  "14-skill". Identical DLL/ESP to v0.8.0 — installer wording only.
+- Removed the stale `FOMOD/` and `MRO-package/` layouts (superseded by
+  MRO-flat / MRO-nofomod).
+
 ## v0.8.0 — 2026-07-06
 
 Native DR and absorb hooks remain **opt-in** (MRO.ini `bPhysicalDRHook` /
