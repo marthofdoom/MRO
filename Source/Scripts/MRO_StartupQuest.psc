@@ -86,11 +86,13 @@ Int   _speechRung      = -1
 ; only exposes integer levels) so the MCM can show granular progress.
 Float[] _mxp
 
-; Cached mastery level/ratio globals (0x850+idx / 0x860+idx), filled
-; lazily. GetMasteryLevel and the ratio publish run per landed hit —
-; look up once, cache forever (FormIDs are frozen post-release).
+; Cached mastery level/ratio/xp-speed globals (0x850/0x860/0x870 + idx),
+; filled lazily. These run per landed hit / per cast — look up once,
+; cache forever (FormIDs are frozen post-release).
 GlobalVariable[] _mLvlG
 GlobalVariable[] _mRatG
+GlobalVariable[] _mXpmG
+Sound _skillUpSound
 
 ; ===============================================================
 ; STARTUP
@@ -215,7 +217,7 @@ Function RunUpgrade(Int fromVersion)
     ; Only announce true mid-playthrough upgrades, and only when the
     ; intro already ran (a fresh install announces via the intro).
     If MRO_SetupDone && MRO_SetupDone.GetValueInt() == 1
-        Debug.Notification("Marth Requiem Overhaul: updated in place, settings re-applied.")
+        Debug.Notification("marth Requiem Overhaul: updated in place, settings re-applied.")
     EndIf
 EndFunction
 
@@ -223,7 +225,7 @@ EndFunction
 ; FIRST-RUN INTRO
 ; ===============================================================
 Function RunFirstTimeSetup()
-    Debug.MessageBox("Marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs spell damage as health\n  (101% = 1% absorbed, 200% = 100% absorbed)\n- Physical DR past 75% now scales, reaching 99% at ~2000 armor\n- Vendor gold doubled\n- 13-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
+    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs spell damage as health\n  (101% = 1% absorbed, 200% = 100% absorbed)\n- Physical DR past 75% now scales, reaching 99% at ~2000 armor\n- Vendor gold doubled\n- 13-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
 EndFunction
 
 ; ===============================================================
@@ -456,10 +458,10 @@ Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
         Return
     EndIf
     If actionType == 2
-        ; Spell XP requires combat — casting at walls trains nothing.
-        If !PlayerRef.IsInCombat()
-            Return
-        EndIf
+        ; Per-school combat gating lives in GrantSpellMasteryXP:
+        ; Illusion and Alteration train out of combat (utility schools
+        ; cast mostly outside a fight); the rest require combat so
+        ; casting at walls trains nothing.
         Spell sp = akSource as Spell
         If sp
             GrantSpellMasteryXP(sp)
@@ -549,16 +551,19 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     If MRO_MasteryBaseGrant
         baseGrant = MRO_MasteryBaseGrant.GetValue()
     EndIf
+    baseGrant *= XPSpeedFor(idx)   ; per-skill multiplier (weapons default 2.5x)
     Float lvl = (100.0 + n) / 100.0
     Float needed = ActionsAtZero(idx) * lvl * lvl
     _mxp[idx] = _mxp[idx] + (baseGrant / needed)
     If _mxp[idx] >= 1.0
         _mxp[idx] = _mxp[idx] - 1.0
+        Int newLevel = currentMastery + 1
         GlobalVariable lg = MasteryLevelGlobal(skillId)
         If lg
-            lg.SetValue((currentMastery + 1) as Float)
+            lg.SetValue(newLevel as Float)
         EndIf
-        CustomSkills.ShowSkillIncreaseMessage(skillId, currentMastery + 1)
+        CustomSkills.ShowSkillIncreaseMessage(skillId, newLevel)
+        AnnounceMasteryLevelUp(skillId, newLevel)
     EndIf
     GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
     If rg
@@ -704,16 +709,22 @@ Function GrantSpellMasteryXP(Spell sp)
         Return
     EndIf
     String school = eff.GetAssociatedSkill()
-    If school == "Destruction" && PlayerRef.GetBaseActorValue("Destruction") >= 100.0
+    Bool inCombat = PlayerRef.IsInCombat()
+    ; Illusion and Alteration are utility schools cast mostly outside a
+    ; fight — they train anytime. Destruction/Restoration/Conjuration
+    ; require combat (no wall-casting to farm XP).
+    If school == "Alteration" && PlayerRef.GetBaseActorValue("Alteration") >= 100.0
+        GrantMasteryXP(ID_AL, GetMasteryLevel(ID_AL))
+    ElseIf school == "Illusion" && PlayerRef.GetBaseActorValue("Illusion") >= 100.0
+        GrantMasteryXP(ID_IL, GetMasteryLevel(ID_IL))
+    ElseIf !inCombat
+        Return
+    ElseIf school == "Destruction" && PlayerRef.GetBaseActorValue("Destruction") >= 100.0
         GrantMasteryXP(ID_DS, GetMasteryLevel(ID_DS))
     ElseIf school == "Restoration" && PlayerRef.GetBaseActorValue("Restoration") >= 100.0
         GrantMasteryXP(ID_RS, GetMasteryLevel(ID_RS))
-    ElseIf school == "Alteration" && PlayerRef.GetBaseActorValue("Alteration") >= 100.0
-        GrantMasteryXP(ID_AL, GetMasteryLevel(ID_AL))
     ElseIf school == "Conjuration" && PlayerRef.GetBaseActorValue("Conjuration") >= 100.0
         GrantMasteryXP(ID_CJ, GetMasteryLevel(ID_CJ))
-    ElseIf school == "Illusion" && PlayerRef.GetBaseActorValue("Illusion") >= 100.0
-        GrantMasteryXP(ID_IL, GetMasteryLevel(ID_IL))
     EndIf
 EndFunction
 
@@ -964,6 +975,35 @@ GlobalVariable Function MasteryRatioGlobalByIndex(Int idx)
     Return _mRatG[idx]
 EndFunction
 
+; Per-skill XP-speed multiplier (0x870+idx). Defaults: weapons 2.5, rest
+; 1.0 (baked into the globals). MCM sliders write these live.
+Float Function XPSpeedFor(Int idx)
+    If idx < 0
+        Return 1.0
+    EndIf
+    If !_mXpmG
+        _mXpmG = new GlobalVariable[14]
+    EndIf
+    If !_mXpmG[idx]
+        _mXpmG[idx] = Game.GetFormFromFile(0x870 + idx, "MRO.esp") as GlobalVariable
+    EndIf
+    If _mXpmG[idx]
+        Float m = _mXpmG[idx].GetValue()
+        If m > 0.0
+            Return m
+        EndIf
+    EndIf
+    Return 1.0
+EndFunction
+
+GlobalVariable Function XPSpeedGlobalByIndex(Int idx)
+    XPSpeedFor(idx)   ; ensure cached
+    If _mXpmG && idx >= 0 && idx < 14
+        Return _mXpmG[idx]
+    EndIf
+    Return None
+EndFunction
+
 Int Function GetMasteryLevel(String skillId)
     GlobalVariable g = MasteryLevelGlobal(skillId)
     If g
@@ -984,6 +1024,132 @@ Float Function GetMasteryCap()
         Return cap
     EndIf
     Return 100.0
+EndFunction
+
+; Display name for a mastery skill, matching the MCM labels.
+String Function MasteryLabel(String skillId)
+    If skillId == ID_OH
+        Return "One-Handed"
+    ElseIf skillId == ID_TH
+        Return "Two-Handed"
+    ElseIf skillId == ID_MK
+        Return "Archery"
+    ElseIf skillId == ID_LA
+        Return "Evasion"
+    ElseIf skillId == ID_HA
+        Return "Heavy Armor"
+    ElseIf skillId == ID_DS
+        Return "Destruction"
+    ElseIf skillId == ID_RS
+        Return "Restoration"
+    ElseIf skillId == ID_AL
+        Return "Alteration"
+    ElseIf skillId == ID_CJ
+        Return "Conjuration"
+    ElseIf skillId == ID_IL
+        Return "Illusion"
+    ElseIf skillId == ID_SM
+        Return "Smithing"
+    ElseIf skillId == ID_AC
+        Return "Alchemy"
+    ElseIf skillId == ID_EN
+        Return "Enchanting"
+    ElseIf skillId == ID_SP
+        Return "Speech"
+    EndIf
+    Return "Mastery"
+EndFunction
+
+String Function SkillIdByIndex(Int idx)
+    If idx == 0
+        Return ID_OH
+    ElseIf idx == 1
+        Return ID_TH
+    ElseIf idx == 2
+        Return ID_MK
+    ElseIf idx == 3
+        Return ID_LA
+    ElseIf idx == 4
+        Return ID_HA
+    ElseIf idx == 5
+        Return ID_DS
+    ElseIf idx == 6
+        Return ID_RS
+    ElseIf idx == 7
+        Return ID_AL
+    ElseIf idx == 8
+        Return ID_CJ
+    ElseIf idx == 9
+        Return ID_IL
+    ElseIf idx == 10
+        Return ID_SM
+    ElseIf idx == 11
+        Return ID_AC
+    ElseIf idx == 12
+        Return ID_EN
+    ElseIf idx == 13
+        Return ID_SP
+    EndIf
+    Return ""
+EndFunction
+
+; MCM bottom-bar text for a mastery skill row: what it grants right now
+; and at the cap. Called on highlight (idx = SkillIndex order 0-13).
+String Function GetMasteryHoverTextByIndex(Int idx)
+    String skillId = SkillIdByIndex(idx)
+    If skillId == ""
+        Return ""
+    EndIf
+    Int lvl = GetMasteryLevel(skillId)
+    Int cap = GetMasteryCap() as Int
+    Float frac = GetMasteryFraction(skillId)
+    String head = MasteryLabel(skillId) + " Mastery " + lvl + "/" + cap + ": "
+
+    If skillId == ID_OH || skillId == ID_TH || skillId == ID_MK
+        Float maxB = 50.0
+        If MRO_T_WeaponMasteryBonus
+            maxB = MRO_T_WeaponMasteryBonus.GetValue()
+        EndIf
+        Return head + "+" + ((frac * maxB) as Int) + "% attack damage now (at cap +" + (maxB as Int) + "%). Applies while the matching weapon is equipped."
+    ElseIf skillId == ID_LA || skillId == ID_HA
+        Float maxB = 300.0
+        If MRO_T_ArmorMasteryBonus
+            maxB = MRO_T_ArmorMasteryBonus.GetValue()
+        EndIf
+        String chest = "a light chest"
+        If skillId == ID_HA
+            chest = "a heavy chest"
+        EndIf
+        Return head + "+" + ((frac * maxB) as Int) + " armor rating now while " + chest + " is worn (at cap +" + (maxB as Int) + "). Feeds the Physical DR curve."
+    ElseIf skillId == ID_DS || skillId == ID_RS || skillId == ID_AL || skillId == ID_CJ || skillId == ID_IL
+        Return head + "+" + ((frac * 50.0) as Int) + " effective school skill now (at cap +50)."
+    ElseIf skillId == ID_SM
+        Return head + "+" + ((frac * 25.0) as Int) + "% tempering power and +" + ((frac * 100.0) as Int) + "% temper cap now (at cap +25% / +100%)."
+    ElseIf skillId == ID_AC
+        Return head + "+" + ((frac * 25.0) as Int) + "% potion strength now (at cap +25%)."
+    ElseIf skillId == ID_EN
+        Return head + "+" + ((frac * 25.0) as Int) + "% enchantment strength now (at cap +25%)."
+    ElseIf skillId == ID_SP
+        Int rung = (frac * 5.0) as Int
+        If frac >= 1.0
+            rung = 5
+        EndIf
+        Return head + "barter tier " + rung + "/5 now (at cap: buy 20% cheaper, sell 25% higher)."
+    EndIf
+    Return head
+EndFunction
+
+; Unmissable "you leveled a mastery" feedback: corner notification plus
+; the vanilla skill-increase sound (Skyrim.esm UISkillIncrease 0x018538).
+; CSF's ShowSkillIncreaseMessage alone proved too subtle to notice.
+Function AnnounceMasteryLevelUp(String skillId, Int newLevel)
+    Debug.Notification(MasteryLabel(skillId) + " Mastery increased to " + newLevel)
+    If !_skillUpSound
+        _skillUpSound = Game.GetFormFromFile(0x00018538, "Skyrim.esm") as Sound
+    EndIf
+    If _skillUpSound
+        _skillUpSound.Play(PlayerRef)
+    EndIf
 EndFunction
 
 ; ===============================================================

@@ -3,6 +3,12 @@ Scriptname MRO_AbsorbMGEF extends ActiveMagicEffect
 ; Resist value at which absorb reaches 100% of damage (MCM slider, default 200)
 GlobalVariable Property MRO_T_AbsorbMax Auto
 
+; DLL sets this to 1 when the native absorb hook is active. The native
+; hook sees the real skill/perk-scaled per-hit magnitude (this OnHit
+; version only sees the authored base magnitude, so it reads too small);
+; when it is live this Papyrus effect stands down to avoid double-healing.
+GlobalVariable Property MRO_G_NativeAbsorb Auto
+
 ; OnHit fires automatically for the target actor - no registration needed.
 ;
 ; Covers three damage sources:
@@ -18,6 +24,12 @@ GlobalVariable Property MRO_T_AbsorbMax Auto
 ; 100% of magnitude (full absorb at 200% resistance).
 Event OnHit(ObjectReference akAggressor, Form akSource, Projectile akProjectile, \
             Bool abPowerAttack, Bool abSneakAttack, Bool abBashAttack, Bool abHitBlocked)
+    ; Native absorb hook in control? Stand down (it heals from the real
+    ; per-hit magnitude; running both would double-heal).
+    If MRO_G_NativeAbsorb && MRO_G_NativeAbsorb.GetValueInt() == 1
+        Return
+    EndIf
+
     Actor hitTarget = GetTargetActor()
     If !hitTarget || hitTarget.IsDead()
         Return

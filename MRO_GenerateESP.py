@@ -69,6 +69,7 @@ FID_EVENTS_SPELL   = OWN | 0x817  # always-on ability carrying it
 FID_G_LAFRAC       = OWN | 0x818  # bridge: player Evasion mastery fraction 0-100 (Papyrus->DLL)
 FID_G_HAFRAC       = OWN | 0x819  # bridge: player Heavy mastery fraction 0-100 (Papyrus->DLL)
 FID_G_NATIVEDR     = OWN | 0x81A  # bridge: DLL sets 1 when its DR hook is active (DLL->Papyrus)
+FID_G_NATIVEABS    = OWN | 0x81B  # bridge: DLL sets 1 when its absorb hook is active (DLL->Papyrus)
 FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
@@ -86,11 +87,19 @@ FID_ML_BASE        = OWN | 0x850  # ..0x85D
 # Mastery progress-ratio globals (0-1), same order: published from the
 # Papyrus _mxp accumulators so the CSF skill menu shows progress.
 FID_MR_BASE        = OWN | 0x860  # ..0x86D
+# Per-skill XP-speed multipliers, same order. 1.0 = default rate; the
+# three weapon skills default to 2.5 (weapon mastery trained far slower
+# than armor/magic in play). MCM slider per skill; multiplies the grant.
+FID_XPM_BASE       = OWN | 0x870  # ..0x87D
 
 MASTERY_SKILLS = ["OneHanded", "TwoHanded", "Marksman", "LightArmor",
                   "HeavyArmor", "Destruction", "Restoration", "Alteration",
                   "Conjuration", "Illusion", "Smithing", "Alchemy",
                   "Enchanting", "Speech"]
+# Default per-skill XP-speed multiplier (index order = MASTERY_SKILLS).
+# Weapons (OneHanded/TwoHanded/Marksman) 2.5x; everything else 1.0.
+XPM_DEFAULTS = [2.5, 2.5, 2.5, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Binary helpers
@@ -217,12 +226,16 @@ GLOBALS = [
     ("MRO_G_LAFrac",       FID_G_LAFRAC,      'f', 0.0),
     ("MRO_G_HAFrac",       FID_G_HAFRAC,      'f', 0.0),
     ("MRO_G_NativeDR",     FID_G_NATIVEDR,    'f', 0.0),
+    ("MRO_G_NativeAbsorb", FID_G_NATIVEABS,   'f', 0.0),
 ]
 # Mastery level + ratio globals (see FID_ML_BASE comment)
 for _i, _sk in enumerate(MASTERY_SKILLS):
     GLOBALS.append((f"MRO_ML_{_sk}", FID_ML_BASE + _i, 'f', 0.0))
 for _i, _sk in enumerate(MASTERY_SKILLS):
     GLOBALS.append((f"MRO_MR_{_sk}", FID_MR_BASE + _i, 'f', 0.0))
+# Per-skill XP-speed multipliers (see FID_XPM_BASE comment)
+for _i, _sk in enumerate(MASTERY_SKILLS):
+    GLOBALS.append((f"MRO_XPM_{_sk}", FID_XPM_BASE + _i, 'f', XPM_DEFAULTS[_i]))
 
 def make_globs(overrides: dict = None) -> bytes:
     out = BytesIO()
@@ -283,7 +296,8 @@ def make_mgefs() -> bytes:
     # SKSE GetResistance() and PO3 archetype checks.
     vmad = VMADBuilder()
     vmad.add_script("MRO_AbsorbMGEF", [
-        ("MRO_T_AbsorbMax", prop_obj(FID_G_ABSORBMAX)),
+        ("MRO_T_AbsorbMax",    prop_obj(FID_G_ABSORBMAX)),
+        ("MRO_G_NativeAbsorb", prop_obj(FID_G_NATIVEABS)),
     ])
     body  = subrec('EDID', zstr("MRO_AbsorbMGEF"))
     body += subrec('VMAD', vmad.build())
@@ -436,10 +450,6 @@ def make_mcm_quest() -> bytes:
     vmad = VMADBuilder()
     vmad.add_script("MRO_MCM", [
         ("MRO_Quest",            prop_obj(FID_STARTUP_QUEST)),
-        ("MQ206_AlduinsBane",    prop_obj(FREF_MQ206)),
-        ("MQ305_Sovngarde",      prop_obj(FREF_MQ305)),
-        ("DLC1VQ08_Harkon",      prop_obj(FREF_DLC1_HARKON)),
-        ("DLC2MQ06_Miraak",      prop_obj(FREF_DLC2_MIRAAK)),
         ("MRO_MasteryEnabled",   prop_obj(FID_G_MASTERYENA)),
         ("MRO_MasteryBaseGrant", prop_obj(FID_G_MASTERYGNT)),
         ("MRO_MasteryCap",       prop_obj(FID_G_MASTERYCAP)),
