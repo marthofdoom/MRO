@@ -273,6 +273,12 @@ void Handle(RE::MagicTarget* a_this, RE::MagicTarget::AddTargetData* a_data) {
         return;
     }
 
+    // Diagnostic: every applied absorb prints its inputs so MRO.log is
+    // ground truth (no health-bar reading / regen fighting needed). Walk
+    // into any fire and read these lines. Remove once absorb is verified.
+    spdlog::info("Absorb: resistAV={} resist={:.1f} fullAt={:.1f} frac={:.3f} baseMag={:.2f} heal={:.2f}",
+                 static_cast<int>(resistAV), resist, fullAt, frac, baseMag, heal);
+
     const float maxHP = avo->GetPermanentActorValue(RE::ActorValue::kHealth);
     const float curHP = avo->GetActorValue(RE::ActorValue::kHealth);
     float missing = maxHP - curHP;
