@@ -1,29 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <fomod>
-  <Name>Marth Requiem Overhaul</Name>
-  <Author>Marth</Author>
-  <Version>0.7.0</Version>
-  <Description>A terminal load-order mod that rebalances Requiem's elemental mechanics,
-defense scaling, and late-game power curve.
+  <Name>marth Requiem Overhaul</Name>
+  <Author>marth</Author>
+  <Version>0.9.3</Version>
+  <Description>A load-order mod that rebalances Requiem's late-game power scaling.
+Early and mid game are untouched; every feature gates on endgame investment,
+so you keep ascending while enemies keep their Requiem lethality.
 
 Core features:
-- Elemental resistance cap removed; resistances above 100% absorb spell and
-  enchantment damage as healing (1% per point, full absorb at 200%)
-- Physical DR scales past the 75% armor cap for the player and followers only,
-  reaching 99% at ~2000 armor rating; the curve below 750 armor is unchanged
-- 14-skill Mastery system: unlocks at base skill 100, advances through usage.
-  Combat skills up to +50% damage, armor skills up to +300 armor rating,
-  magic schools up to +50 effective skill, crafting up to +25%
-- Live Feature Toggles MCM: resistance cap, armor DR scaling, absorb,
-  carry weight, arrow recovery, cell reset
-- Vendor gold doubled from load-order values
-- 3-day cell reset (from Requiem's 30-day default) for reliable restocking
-- First-run intro explains all changes; full customization via MCM
-- Optional Experience.ini: same total speed as Faster Leveling, weighted
-  toward kills and quest completion over pure exploration
-- Requires: SKSE64, SkyUI 5.2+ (MCM), Custom Skills Framework (Mastery),
-  powerofthree's Papyrus Extender
-- Compatible with: Experience.esp (XP rates), World Eater's Influence,
-  Immersive Miraak Difficulty</Description>
+- Elemental resistance cap removed; resistance above 100% absorbs that
+  element's incoming damage as healing (1% per point over 100, full absorb at
+  a configurable resistance, default 200%). Covers spells, enchantments,
+  drains, and poisons
+- Physical DR scales past the engine's 75% armor cap for you and your
+  followers only, gated and ceilinged by your armor mastery. The armor rating
+  for 99% DR is auto-calibrated from your load order's best gear and is
+  MCM-tunable; the curve below the cap is unchanged and enemies never benefit
+- 14-skill Mastery system: each skill unlocks at base 100 and advances through
+  real use. Weapon XP is damage-scaled (normalized per hit, so overkill on
+  weak enemies earns nothing and 1H/2H train at parity); magic XP is weighted
+  by magicka spent. Bonuses at full mastery: weapons +50% damage, armor +300
+  rating, magic +50 effective skill, crafting +25%, plus a Speech barter ladder
+- Vendor gold doubled in memory at load, adapting to any load order
+- Quality of life: party-wide +150 carry weight and 66% arrow recovery
+- MCM: live feature toggles, per-skill mastery progress and tuning sliders,
+  and a Live Status panel showing your real DR% and per-element absorb
+- Optional Experience.ini: same total leveling speed as Faster Leveling,
+  weighted toward kills and quests over pure exploration
+
+Requires: SKSE64, SkyUI 5.2+ (MCM), Custom Skills Framework (Mastery),
+powerofthree's Papyrus Extender, and PapyrusUtil. Developed against the LoreRim
+modlist on Skyrim SE 1.6.1170.</Description>
   <Website></Website>
 </fomod>

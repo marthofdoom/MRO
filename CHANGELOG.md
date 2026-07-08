@@ -4,6 +4,33 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.3 — 2026-07-08 (alpha)
+
+First tagged pre-release.
+
+### Added
+- MCM Tuning sliders for the two combat-XP pace dials: **Weapon XP Pace**
+  (`MRO_T_WeaponXPPerAction`) and **Magic XP Pace** (`MRO_T_MagicXPPerCost`).
+  Previously console-only.
+
+### Removed
+- The MCM "Testing" buttons (Grant +25 Evasion / Heavy Armor Mastery) — dev
+  scaffolding that permanently granted irreversible mastery levels. QA via the
+  console instead: `set MRO_ML_<Skill> to <n>`.
+
+### Changed
+- FOMOD refreshed: lowercase "marth"; version now auto-stamped by `release.sh`;
+  the retired cell reset is no longer advertised as a core ON feature (now
+  "Faster Cell Reset", default OFF, with the all-or-nothing caveat); mastery-XP
+  descriptions updated to the current model; "13 skills" → 14.
+- First-run intro popup and MCM copy corrected (14 skills; DR described as
+  mastery-gated rather than a stale armor number; accurate cost-curve wording).
+- README: added a Roadmap section.
+
+### Notes
+- Papyrus + FOMOD/docs only — **MRO.dll is byte-identical to v0.9.1**, so the
+  load banner reads v0.9.1; the MCM version (0.9.3) is the package check.
+
 ## v0.9.2 — 2026-07-08
 
 ### Changed

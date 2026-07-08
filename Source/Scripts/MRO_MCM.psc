@@ -3,7 +3,7 @@ Scriptname MRO_MCM extends SKI_ConfigBase
 Quest           Property MRO_Quest              Auto
 
 ; Stamped by release.sh — do not edit by hand
-String Property MRO_VERSION = "0.9.2" AutoReadOnly
+String Property MRO_VERSION = "0.9.3" AutoReadOnly
 
 GlobalVariable  Property MRO_MasteryEnabled     Auto
 GlobalVariable  Property MRO_MasteryBaseGrant   Auto
@@ -36,6 +36,8 @@ Int _oidDR99Armor   = -1
 Int _oidArmorMastB  = -1
 Int _oidWeapMastB   = -1
 Int _oidXPSpeed     = -1
+Int _oidWeapXP      = -1
+Int _oidMagicXP     = -1
 
 ; Per-skill XP-speed slider OIDs, index = SkillIndex order (0-13)
 Int[] _oidXpm
@@ -43,10 +45,6 @@ Int[] _oidXpm
 ; Mastery skill-row OIDs, index = SkillIndex order (0-13). Highlight shows
 ; that skill's current bonus in the bottom bar.
 Int[] _oidSkill
-
-; Testing buttons
-Int _oidTestLA      = -1
-Int _oidTestHA      = -1
 
 ; ==========================================================
 ; INIT
@@ -124,11 +122,6 @@ Event OnOptionSelect(Int a_option)
         Bool newVal = !FEnabled(MRO_MasteryEnabled)
         MRO_MasteryEnabled.SetValue(newVal as Float)
         SetToggleOptionValue(_oidMastery, newVal)
-
-    ElseIf a_option == _oidTestLA
-        TestGrant(false)
-    ElseIf a_option == _oidTestHA
-        TestGrant(true)
     EndIf
 EndEvent
 
@@ -143,15 +136,6 @@ Function NudgeQuest(Bool gmst, Bool abilities)
     If abilities
         q.RefreshAbilities()
     EndIf
-EndFunction
-
-Function TestGrant(Bool heavy)
-    MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
-    If !q
-        Return
-    EndIf
-    q.TestGrantArmorMastery(heavy, 25)
-    ForcePageReset()
 EndFunction
 
 ; ==========================================================
@@ -171,6 +155,10 @@ Event OnOptionSliderOpen(Int a_option)
         SliderSetup(MRO_T_WeaponMasteryBonus, 50.0, 0.0, 100.0, 5.0)
     ElseIf a_option == _oidXPSpeed
         SliderSetup(MRO_MasteryBaseGrant, 1.0, 0.25, 4.0, 0.25)
+    ElseIf a_option == _oidWeapXP
+        SliderSetup(Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable, 1.0, 0.25, 5.0, 0.25)
+    ElseIf a_option == _oidMagicXP
+        SliderSetup(Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable, 150.0, 25.0, 500.0, 25.0)
     Else
         Int xi = XpmIndexOf(a_option)
         If xi >= 0
@@ -211,6 +199,11 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     ElseIf a_option == _oidXPSpeed
         gv = MRO_MasteryBaseGrant
         fmt = "{2}"
+    ElseIf a_option == _oidWeapXP
+        gv = Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable
+        fmt = "{2}"
+    ElseIf a_option == _oidMagicXP
+        gv = Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable
     Else
         Int xi = XpmIndexOf(a_option)
         If xi >= 0
@@ -247,7 +240,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidVendorGold
         SetInfoText("All 13 vendor gold pools doubled at game load by MRO.dll - adapts to any load order. Merchants pick it up on their next restock.")
     ElseIf a_option == _oidMasteryCap
-        SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost follows the vanilla skill curve extended past 100: mastery n prices like skill level 100+n, so level 200 costs 9x level 1. Discipline-specific actions (landed hits, casts, combat time, sessions).")
+        SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost rises steeply with level; weapons and magic use an extra-steep endgame curve, so the final levels cost many times the first. Each skill trains on its own action: weapon damage dealt, magicka spent, combat time, or craft/barter sessions.")
     ElseIf a_option == _oidAbsorbMax
         SetInfoText("Resistance at which elemental absorb heals 100% of damage. Lower = absorb builds come online faster.")
     ElseIf a_option == _oidDR99Armor
@@ -258,8 +251,10 @@ Event OnOptionHighlight(Int a_option)
         SetInfoText("Attack damage bonus (percent) granted by a fully-leveled weapon mastery.")
     ElseIf a_option == _oidXPSpeed
         SetInfoText("Global mastery XP speed multiplier. 2 = levels twice as fast, 0.5 = half speed.")
-    ElseIf a_option == _oidTestLA || a_option == _oidTestHA
-        SetInfoText("TEST BUTTON: permanently grants 25 REAL mastery levels via Custom Skills Framework (no way to remove them - throwaway saves only). Levels publish to the DR engine immediately; wear a matching chest piece and check Live Status.")
+    ElseIf a_option == _oidWeapXP
+        SetInfoText("Weapon mastery pace: hits per XP action (higher = slower). Applies to all weapon skills and scales the whole weapon curve. Default 1.0.")
+    ElseIf a_option == _oidMagicXP
+        SetInfoText("Magic mastery pace: magicka spent per XP action (higher = slower). Bigger spells train more; cheap spam trains little. Default 150.")
     ElseIf XpmIndexOf(a_option) >= 0
         SetInfoText("XP-speed multiplier for THIS mastery only. 2.5 = 2.5x faster to the next level. Weapon skills default to 2.5 (they train slower than armor/magic); everything else defaults to 1.")
     ElseIf MasteryOidIndex(a_option) >= 0
@@ -421,7 +416,7 @@ Function RenderFeatures()
     AddHeaderOption("Quality of Life")
     _oidCarryWeight = AddToggleOption("Carry Weight +150",  FEnabled(MRO_F_CarryWeight))
     _oidArrowRecov  = AddToggleOption("Arrow Recovery 66%", FEnabled(MRO_F_ArrowRecovery))
-    _oidCellReset   = AddToggleOption("3-Day Cell Reset",   FEnabled(MRO_F_CellReset))
+    _oidCellReset   = AddToggleOption("Faster Cell Reset",  FEnabled(MRO_F_CellReset))
     AddEmptyOption()
 
     AddHeaderOption("Mastery")
@@ -434,6 +429,8 @@ Function RenderFeatures()
     _oidArmorMastB = AddSliderOption("Armor Mastery Bonus",   SliderVal(MRO_T_ArmorMasteryBonus, 300.0), "{0}")
     _oidWeapMastB  = AddSliderOption("Weapon Mastery Bonus",  SliderVal(MRO_T_WeaponMasteryBonus, 50.0), "{0}%")
     _oidXPSpeed    = AddSliderOption("Mastery XP Speed",      SliderVal(MRO_MasteryBaseGrant, 1.0), "{2}")
+    _oidWeapXP     = AddSliderOption("Weapon XP Pace", SliderVal(Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable, 1.0), "{2}")
+    _oidMagicXP    = AddSliderOption("Magic XP Pace",  SliderVal(Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable, 150.0), "{0}")
     AddEmptyOption()
 
     AddHeaderOption("Live Status")
@@ -483,11 +480,6 @@ Function RenderFeatures()
 
     AddHeaderOption("Baked Into ESP")
     _oidVendorGold = AddTextOption("Vendor Gold", "Doubled")
-    AddEmptyOption()
-
-    AddHeaderOption("Testing")
-    _oidTestLA = AddTextOption("Grant +25 Evasion Mastery", "[Apply]")
-    _oidTestHA = AddTextOption("Grant +25 Heavy Armor Mastery", "[Apply]")
     AddEmptyOption()
 
     AddHeaderOption("About")

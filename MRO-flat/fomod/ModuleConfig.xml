@@ -2,7 +2,7 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
 
-  <moduleName>Marth Requiem Overhaul</moduleName>
+  <moduleName>marth Requiem Overhaul</moduleName>
 
   <requiredInstallFiles>
     <file source="MRO.esp" destination="MRO.esp"/>
@@ -86,10 +86,12 @@ Default: ON. Toggle in MCM > Features.</description>
               <typeDescriptor><type name="Required"/></typeDescriptor>
             </plugin>
 
-            <plugin name="3-Day Cell Reset">
-              <description>Cells respawn after 72 hours (7 days if cleared) instead of Requiem's 30 days. Shops restock reliably and the world stays active. Be aware dungeons also repopulate on this schedule.
+            <plugin name="Faster Cell Reset (off by default)">
+              <description>Optional: speeds cell respawn to restock shops and repopulate dungeons faster than Requiem's long timers.
 
-Default: ON. Toggle in MCM > Features.</description>
+DEFAULT OFF, and left off is recommended. Respawn in Skyrim is all-or-nothing: turning this on also returns display and quest items to cells and can revert one-time activators (for example, Blackreach lifts). Only enable it if you accept that trade-off.
+
+Toggle in MCM > Features.</description>
               <files/>
               <typeDescriptor><type name="Required"/></typeDescriptor>
             </plugin>
@@ -105,7 +107,9 @@ Default: ON. Toggle in MCM > Features.</description>
           <plugins order="Explicit">
 
             <plugin name="Enable Mastery System (recommended)">
-              <description>14 mastery skills tracked via Custom Skills Framework. Each unlocks when its base skill reaches 100 and advances through real use (landed hits, combat casts, combat time, craft and barter sessions) on vanilla's leveling curve extended past 100.
+              <description>14 mastery skills tracked via Custom Skills Framework. Each unlocks when its base skill reaches 100 and advances through real use, on a leveling curve extended past 100 (weapons and magic use a steeper endgame curve, so the top levels cost far more than the first).
+
+How each trains: weapons by damage dealt, normalized per hit (overkill on weak enemies earns nothing, and 1H/2H train at parity); magic by magicka spent per cast (bigger spells train more; the schools that require combat still do); armor by combat time in a matching chest piece; crafting and Speech by sessions.
 
 Bonuses at full mastery:
 - One-Handed / Two-Handed / Archery: +50% attack damage
@@ -135,7 +139,7 @@ Mastery cap is adjustable in the MCM (50-200; default 100). Higher caps mean a l
             </plugin>
 
             <plugin name="Disable Mastery System">
-              <description>No Custom Skills Framework files installed - the 13 mastery skills never appear and no mastery bonuses apply. Every other MRO feature remains active. You can NOT enable mastery later without reinstalling.</description>
+              <description>No Custom Skills Framework files installed - the 14 mastery skills never appear and no mastery bonuses apply. Every other MRO feature remains active. You can NOT enable mastery later without reinstalling.</description>
               <files/>
               <typeDescriptor><type name="Optional"/></typeDescriptor>
             </plugin>

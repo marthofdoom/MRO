@@ -77,6 +77,28 @@ game binary and stand down safely if it differs (see `MRO.log`).
 Upgrades are save-safe within a major line: settings persist and the scripts
 migrate themselves in place on load.
 
+## Roadmap
+
+MRO is pre-1.0 and under active development. Current directions:
+
+- **Broaden beyond Requiem.** Detect the load order's balance style and
+  auto-tune growth rates and targets so MRO fits more setups, not just
+  Requiem/LoreRim. A rename follows once it is no longer Requiem-specific.
+- **Load-order-aware calibration.** A regenerator pass that reads your actual
+  load order — including the Experience mod's settings and your spells' real
+  magicka costs — to bake list-appropriate defaults, so the numbers suit
+  whatever you play rather than one reference list.
+- **Mastery capstones.** Milestone unlocks at high mastery that you actually
+  feel — for example, each magic school's master (two-handed) spells becoming
+  castable one-handed at 50, then dual-castable at 100.
+- **Symmetric combat XP.** Move armor mastery XP onto the same per-hit
+  measurement weapons already use, so both sides of a fight train from real
+  damage on one code path.
+- **Refinements.** Per-station crafting XP attribution, an optional toggle for
+  how magic resistance interacts with elemental resistance, skill books
+  granting partial mastery levels, and upgrades that never overwrite your
+  existing INI/MCM settings.
+
 ## Repo layout
 
 ```

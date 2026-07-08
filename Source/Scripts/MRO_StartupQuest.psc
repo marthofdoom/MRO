@@ -242,7 +242,7 @@ EndFunction
 ; FIRST-RUN INTRO
 ; ===============================================================
 Function RunFirstTimeSetup()
-    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs spell damage as health\n  (101% = 1% absorbed, 200% = 100% absorbed)\n- Physical DR past 75% now scales, reaching 99% at ~2000 armor\n- Vendor gold doubled\n- 13-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
+    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs that element's damage as health\n  (101% = 1% absorbed, 200% = full absorb)\n- Physical DR scales past the 75% armor cap, gated by your armor mastery\n- Vendor gold doubled\n- 14-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
 EndFunction
 
 ; ===============================================================
