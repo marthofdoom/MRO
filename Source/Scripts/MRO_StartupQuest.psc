@@ -73,7 +73,7 @@ Bool   _introShown = false
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 4 AutoReadOnly
+Int Property SCRIPT_VERSION = 5 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -160,6 +160,13 @@ Event OnUpdate()
         EndIf
     EndIf
 
+    ; Runs regardless of MasteryEnabled: it always drains (zeroes) the
+    ; native damage buckets so they never grow unbounded, and only awards
+    ; XP when mastery is on and the base skill is capped.
+    If NativeWeaponXPActive()
+        DrainNativeWeaponXP()
+    EndIf
+
     RegisterForSingleUpdate(30.0)
 EndEvent
 
@@ -204,6 +211,16 @@ Function RunUpgrade(Int fromVersion)
             EndIf
             fi += 1
         EndWhile
+    EndIf
+
+    ; v5: retire the cell-reset feature. Lowering the respawn timers was
+    ; too broad -- it also respawns display/quest items ("dolls" back in
+    ; cells) and can revert one-time activators (Blackreach lifts). Force
+    ; it off once for saves that stored the old default of 1; the load
+    ; order's own respawn GMSTs win again on the next game load. This is
+    ; the one toggle we deliberately override -- all others are preserved.
+    If fromVersion > 0 && fromVersion < 5 && MRO_F_CellReset
+        MRO_F_CellReset.SetValue(0.0)
     EndIf
 
     ; Re-assert everything that must survive an update: settings,
@@ -307,6 +324,15 @@ EndFunction
 
 Bool Function NativeDRActive()
     GlobalVariable g = Game.GetFormFromFile(0x81A, "MRO.esp") as GlobalVariable
+    Return g && g.GetValueInt() == 1
+EndFunction
+
+; Native weapon-XP (Model 2, docs/WEAPON_XP_MODELS.md). When the DLL's
+; weapon-hit measuring is live it banks the player's credited weapon
+; damage into MRO_X_Pend* (overkill excluded), and the Papyrus per-hit
+; grant in HandleWeaponHit stands down in favour of DrainNativeWeaponXP.
+Bool Function NativeWeaponXPActive()
+    GlobalVariable g = Game.GetFormFromFile(0x81C, "MRO.esp") as GlobalVariable
     Return g && g.GetValueInt() == 1
 EndFunction
 
@@ -480,6 +506,12 @@ Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akP
     If !MasteryEnabled()
         Return
     EndIf
+    ; Native path (Model 2): the DLL measures credited damage per hit and
+    ; DrainNativeWeaponXP applies it on the heartbeat. Stand the flat
+    ; per-hit grant down so XP is not double-counted.
+    If NativeWeaponXPActive()
+        Return
+    EndIf
     Actor victim = akTarget as Actor
     If !victim || victim.IsDead() || !victim.IsHostileToActor(PlayerRef)
         Return
@@ -565,6 +597,89 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
         CustomSkills.ShowSkillIncreaseMessage(skillId, newLevel)
         AnnounceMasteryLevelUp(skillId, newLevel)
     EndIf
+    GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
+    If rg
+        rg.SetValue(_mxp[idx])
+    EndIf
+EndFunction
+
+; ===============================================================
+; NATIVE WEAPON XP DRAIN (Model 2 - docs/WEAPON_XP_MODELS.md)
+; The DLL banks the player's credited weapon damage (capped at the
+; target's remaining HP, so overkill on trivial mobs earns nothing) into
+; MRO_X_Pend{OH,TH,MK}. Each heartbeat we convert that damage to mastery
+; "actions" (WeaponXPPerAction damage = 1 action) and feed the SAME L^2
+; curve the per-hit grant uses, so 1H and 2H train at parity and tanky
+; enemies pay proportionally more.
+; ===============================================================
+Function DrainNativeWeaponXP()
+    Float perAction = 50.0
+    GlobalVariable pa = Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable
+    If pa && pa.GetValue() > 0.0
+        perAction = pa.GetValue()
+    EndIf
+    DrainOneWeapon(ID_OH, "OneHanded", 0x81D, perAction)
+    DrainOneWeapon(ID_TH, "TwoHanded", 0x81E, perAction)
+    DrainOneWeapon(ID_MK, "Marksman",  0x81F, perAction)
+EndFunction
+
+Function DrainOneWeapon(String skillId, String baseAV, Int pendFormId, Float perAction)
+    GlobalVariable pend = Game.GetFormFromFile(pendFormId, "MRO.esp") as GlobalVariable
+    If !pend
+        Return
+    EndIf
+    Float dmg = pend.GetValue()
+    pend.SetValue(0.0)                ; always consume so the bucket never grows unbounded
+    If dmg <= 0.0
+        Return
+    EndIf
+    If !MasteryEnabled()
+        Return                        ; measuring, but mastery off: discard
+    EndIf
+    If PlayerRef.GetBaseActorValue(baseAV) < 100.0
+        Return                        ; base skill not capped yet: no mastery XP
+    EndIf
+    GrantMasteryXPAmount(skillId, GetMasteryLevel(skillId), dmg / perAction)
+EndFunction
+
+; Like GrantMasteryXP but banks a fractional/multi-"action" amount in one
+; call (a heartbeat can carry several fights' worth of damage) and rolls
+; through as many mastery levels as the amount funds.
+Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
+    Int idx = SkillIndex(skillId)
+    If idx < 0 || actions <= 0.0
+        Return
+    EndIf
+    If !_mxp
+        _mxp = new Float[14]
+    EndIf
+    Int capInt = GetMasteryCap() as Int
+    Float baseGrant = 1.0
+    If MRO_MasteryBaseGrant
+        baseGrant = MRO_MasteryBaseGrant.GetValue()
+    EndIf
+    baseGrant *= XPSpeedFor(idx)
+    Float remaining = baseGrant * actions   ; in "action" units
+    Int n = currentMastery
+    While remaining > 0.0 && n < capInt
+        Float lvl = (100.0 + (n as Float)) / 100.0
+        Float needed = ActionsAtZero(idx) * lvl * lvl
+        Float togo = (1.0 - _mxp[idx]) * needed   ; actions left to the next level
+        If remaining < togo
+            _mxp[idx] = _mxp[idx] + (remaining / needed)
+            remaining = 0.0
+        Else
+            remaining -= togo
+            _mxp[idx] = 0.0
+            n += 1
+            GlobalVariable lg = MasteryLevelGlobal(skillId)
+            If lg
+                lg.SetValue(n as Float)
+            EndIf
+            CustomSkills.ShowSkillIncreaseMessage(skillId, n)
+            AnnounceMasteryLevelUp(skillId, n)
+        EndIf
+    EndWhile
     GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
     If rg
         rg.SetValue(_mxp[idx])

@@ -241,7 +241,7 @@ Event OnOptionHighlight(Int a_option)
     ElseIf a_option == _oidArrowRecov
         SetInfoText("Recover arrows from bodies 66% of the time (vanilla 33%).")
     ElseIf a_option == _oidCellReset
-        SetInfoText("Cells respawn after 3 days (7 if cleared) instead of Requiem's 30. Shops restock fast; dungeons repopulate fast too.")
+        SetInfoText("OFF by default. Speeds cell respawn (3/7 days) to restock shops and repopulate dungeons -- but respawn is all-or-nothing: it also returns display/quest items to cells and can revert one-time activators (e.g. Blackreach lifts). Leave off unless you accept that.")
     ElseIf a_option == _oidMastery
         SetInfoText("14 skills that unlock at base skill 100 and grow with use. Armor masteries need a matching chest piece worn.")
     ElseIf a_option == _oidVendorGold
@@ -350,9 +350,11 @@ EndFunction
 Function RenderSkillRow(MRO_StartupQuest q, String label, String skillId, Int idx)
     Int lvl    = q.GetMasteryLevel(skillId)
     Int capInt = q.GetMasteryCap() as Int
-    Int pct    = q.GetMasteryBonusPct(skillId) as Int
     Int prog   = q.GetMasteryProgressPct(skillId) as Int
-    String v = (lvl as String) + "/" + (capInt as String) + " +" + (pct as String) + "%"
+    ; Row shows level/cap and progress-to-next only. The old "+N%" was just
+    ; level-as-percent-of-cap (redundant with lvl/cap) and misread as the
+    ; gameplay bonus; the real, unit-correct bonus lives in the hover text.
+    String v = (lvl as String) + "/" + (capInt as String)
     If lvl < capInt
         v += " (" + (prog as String) + "%)"
     EndIf

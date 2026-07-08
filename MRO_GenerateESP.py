@@ -64,12 +64,17 @@ FID_G_ABSORBMAX    = OWN | 0x812  # tuning: resist at which absorb = 100% (defau
 FID_G_DR99ARMOR    = OWN | 0x813  # tuning: armor rating where DR reaches 99% (default 2000)
 FID_G_ARMORMASTB   = OWN | 0x814  # tuning: armor mastery bonus at cap (default 300)
 FID_G_WEAPMASTB    = OWN | 0x815  # tuning: weapon mastery bonus %% at cap (default 50)
+FID_G_WEAPXPPERACT = OWN | 0x808  # tuning: effective weapon damage per mastery-XP "action" (default 50); Model 2, docs/WEAPON_XP_MODELS.md
 FID_EVENTS_MGEF    = OWN | 0x816  # hidden AME hosting PO3 event receivers
 FID_EVENTS_SPELL   = OWN | 0x817  # always-on ability carrying it
 FID_G_LAFRAC       = OWN | 0x818  # bridge: player Evasion mastery fraction 0-100 (Papyrus->DLL)
 FID_G_HAFRAC       = OWN | 0x819  # bridge: player Heavy mastery fraction 0-100 (Papyrus->DLL)
 FID_G_NATIVEDR     = OWN | 0x81A  # bridge: DLL sets 1 when its DR hook is active (DLL->Papyrus)
 FID_G_NATIVEABS    = OWN | 0x81B  # bridge: DLL sets 1 when its absorb hook is active (DLL->Papyrus)
+FID_G_NATIVEWXP    = OWN | 0x81C  # bridge: DLL sets 1 when native weapon-XP measuring is live (DLL->Papyrus)
+FID_X_PENDOH       = OWN | 0x81D  # bridge: DLL banks player-dealt credited 1H damage (DLL->Papyrus)
+FID_X_PENDTH       = OWN | 0x81E  # bridge: DLL banks player-dealt credited 2H damage
+FID_X_PENDMK       = OWN | 0x81F  # bridge: DLL banks player-dealt credited Archery damage
 FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
@@ -211,7 +216,7 @@ GLOBALS = [
     ("MRO_F_Absorb",       FID_G_ABSORB,      'f', 1.0),
     ("MRO_F_CarryWeight",  FID_G_CARRYWEIGHT, 'f', 1.0),
     ("MRO_F_ArrowRecovery",FID_G_ARROWRECOV,  'f', 1.0),
-    ("MRO_F_CellReset",    FID_G_CELLRESET,   'f', 1.0),
+    ("MRO_F_CellReset",    FID_G_CELLRESET,   'f', 0.0),  # default OFF: cell respawn is too broad (respawns display/quest items, reverts one-time activators e.g. Blackreach lifts)
     ("MRO_SetupDone",      FID_G_SETUPDONE,   'f', 0.0),
     ("MRO_MasteryEnabled", FID_G_MASTERYENA,  'f', 1.0),
     ("MRO_MasteryBaseGrant",FID_G_MASTERYGNT, 'f', 1.0),
@@ -220,6 +225,7 @@ GLOBALS = [
     ("MRO_T_DR99Armor",    FID_G_DR99ARMOR,   'f', 2000.0),
     ("MRO_T_ArmorMasteryBonus",  FID_G_ARMORMASTB, 'f', 300.0),
     ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
+    ("MRO_T_WeaponXPPerAction",  FID_G_WEAPXPPERACT, 'f', 50.0),
     # Papyrus<->DLL bridge globals: accessed via GetFormFromFile /
     # TESDataHandler::LookupForm — deliberately NOT VMAD-wired so they
     # work on saves whose quest instances predate them.
@@ -227,6 +233,10 @@ GLOBALS = [
     ("MRO_G_HAFrac",       FID_G_HAFRAC,      'f', 0.0),
     ("MRO_G_NativeDR",     FID_G_NATIVEDR,    'f', 0.0),
     ("MRO_G_NativeAbsorb", FID_G_NATIVEABS,   'f', 0.0),
+    ("MRO_G_NativeWeaponXP", FID_G_NATIVEWXP, 'f', 0.0),
+    ("MRO_X_PendOH",       FID_X_PENDOH,      'f', 0.0),
+    ("MRO_X_PendTH",       FID_X_PENDTH,      'f', 0.0),
+    ("MRO_X_PendMK",       FID_X_PENDMK,      'f', 0.0),
 ]
 # Mastery level + ratio globals (see FID_ML_BASE comment)
 for _i, _sk in enumerate(MASTERY_SKILLS):

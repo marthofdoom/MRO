@@ -28,6 +28,10 @@ constexpr std::uint32_t kFidNativeDR = 0x81A;
 constexpr std::uint32_t kFidDR99Armor = 0x813;
 constexpr std::uint32_t kFidAbsorbMax = 0x812;      // resist at which absorb = 100% (default 200)
 constexpr std::uint32_t kFidNativeAbsorb = 0x81B;   // DLL->Papyrus: 1 when absorb hook is live
+constexpr std::uint32_t kFidNativeWeaponXP = 0x81C; // DLL->Papyrus: 1 when weapon-XP measuring is live
+constexpr std::uint32_t kFidPendOH = 0x81D;         // DLL->Papyrus: banked credited 1H damage
+constexpr std::uint32_t kFidPendTH = 0x81E;         // DLL->Papyrus: banked credited 2H damage
+constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked credited Archery damage
 
 bool g_drHookWanted = false;    // from MRO.ini
 bool g_drHookLive = false;      // site verified + thunk installed
@@ -40,6 +44,10 @@ RE::TESGlobal* g_nativeDR = nullptr;
 RE::TESGlobal* g_dr99 = nullptr;
 RE::TESGlobal* g_absorbMax = nullptr;
 RE::TESGlobal* g_nativeAbsorb = nullptr;
+RE::TESGlobal* g_nativeWeaponXP = nullptr;
+RE::TESGlobal* g_pendOH = nullptr;
+RE::TESGlobal* g_pendTH = nullptr;
+RE::TESGlobal* g_pendMK = nullptr;
 
 void SetupLog() {
     auto logDir = SKSE::log::log_directory();
@@ -149,9 +157,54 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     a_hitData.totalDamage *= k;
 }
 
+// Model 2 weapon-mastery XP (docs/WEAPON_XP_MODELS.md): bank the player's
+// credited weapon damage — capped at the target's remaining HP so overkill
+// on a trivial mob earns nothing — into a per-weapon-skill bridge global.
+// Papyrus drains it on its heartbeat and owns the XP curve and level-ups;
+// the DLL only measures. Runs inside the weapon-hit thunk BEFORE the
+// original applies the hit, so the victim still holds pre-hit health.
+void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
+    if (!g_pendOH || !g_pendTH || !g_pendMK || !a_victim) {
+        return;
+    }
+    const auto* weapon = a_hitData.weapon;
+    if (!weapon) {
+        return;  // not a physical weapon hit (spell/unarmed/etc.)
+    }
+    const auto aggressor = a_hitData.aggressor.get();
+    if (!aggressor || !aggressor->IsPlayerRef()) {
+        return;  // only the player's own swings train mastery
+    }
+    if (a_victim->IsDead() || a_victim->IsPlayerRef() || a_victim->IsPlayerTeammate()) {
+        return;
+    }
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (player && !a_victim->IsHostileToActor(player)) {
+        return;  // no XP for hitting non-hostiles (townsfolk, summons, etc.)
+    }
+
+    RE::TESGlobal* bucket = nullptr;
+    switch (weapon->weaponData.skill.get()) {
+    case RE::ActorValue::kOneHanded: bucket = g_pendOH; break;
+    case RE::ActorValue::kTwoHanded: bucket = g_pendTH; break;
+    case RE::ActorValue::kArchery:   bucket = g_pendMK; break;
+    default: return;  // staves / hand-to-hand: no weapon mastery
+    }
+
+    const float remaining = a_victim->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
+    float credited = a_hitData.totalDamage;
+    if (credited > remaining) {
+        credited = remaining;  // overkill earns nothing
+    }
+    if (credited > 0.0f) {
+        bucket->value += credited;
+    }
+}
+
 struct WeaponHitThunk {
     static void thunk(RE::Actor* a_victim, RE::HitData& a_hitData) {
         Adjust(a_victim, a_hitData);
+        MeasureWeaponXP(a_victim, a_hitData);
         func(a_victim, a_hitData);
     }
     static inline REL::Relocation<decltype(thunk)> func;
@@ -335,6 +388,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_dr99 = dh->LookupForm<RE::TESGlobal>(kFidDR99Armor, "MRO.esp");
             g_absorbMax = dh->LookupForm<RE::TESGlobal>(kFidAbsorbMax, "MRO.esp");
             g_nativeAbsorb = dh->LookupForm<RE::TESGlobal>(kFidNativeAbsorb, "MRO.esp");
+            g_nativeWeaponXP = dh->LookupForm<RE::TESGlobal>(kFidNativeWeaponXP, "MRO.esp");
+            g_pendOH = dh->LookupForm<RE::TESGlobal>(kFidPendOH, "MRO.esp");
+            g_pendTH = dh->LookupForm<RE::TESGlobal>(kFidPendTH, "MRO.esp");
+            g_pendMK = dh->LookupForm<RE::TESGlobal>(kFidPendMK, "MRO.esp");
         }
         if (g_drHookLive && g_nativeDR) {
             g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
@@ -343,6 +400,13 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (g_absorbHookLive && g_nativeAbsorb) {
             g_nativeAbsorb->value = 1.0f;  // tells the Papyrus OnHit absorb to stand down
             spdlog::info("Absorb hook active: MRO_G_NativeAbsorb=1, Papyrus absorb standing down");
+        }
+        // Weapon-XP measuring rides the DR weapon-hit thunk (same site), so
+        // it is live exactly when the DR hook is. Tell Papyrus to drain the
+        // native buckets instead of its per-hit grant (Model 2).
+        if (g_drHookLive && g_nativeWeaponXP) {
+            g_nativeWeaponXP->value = 1.0f;
+            spdlog::info("Native weapon-XP measuring active (rides DR hook): MRO_G_NativeWeaponXP=1");
         }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
@@ -366,6 +430,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (g_absorbHookLive && g_nativeAbsorb) {
             g_nativeAbsorb->value = 1.0f;
             spdlog::info("post-load: MRO_G_NativeAbsorb re-asserted to 1");
+        }
+        if (g_drHookLive && g_nativeWeaponXP) {
+            g_nativeWeaponXP->value = 1.0f;
+            spdlog::info("post-load: MRO_G_NativeWeaponXP re-asserted to 1");
         }
         break;
     default:
