@@ -79,6 +79,7 @@ FID_DR_PERK_BASE   = OWN | 0x820  # 24 hidden perks: 76%..99% physical DR
 FID_DR_FLST        = OWN | 0x838  # FormList holding the 24 DR perks in order
 FID_SP_PERK_BASE   = OWN | 0x840  # 5 hidden perks: barter bonus ladder (Speech mastery)
 FID_SP_FLST        = OWN | 0x845  # FormList holding the 5 barter perks in order
+FID_G_MAGICXPPERCOST = OWN | 0x846  # tuning: effective magicka cost per magic mastery-XP "action" (default 150, higher = slower); cost-weighted spell XP
 
 # Mastery LEVEL globals, one per skill in SkillIndex order (OH TH MK LA
 # HA DS RS AL CJ IL SM AC EN SP). Bound as each CSF skill's "level" in
@@ -201,7 +202,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.9.1"))
+    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.9.2"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -226,6 +227,7 @@ GLOBALS = [
     ("MRO_T_ArmorMasteryBonus",  FID_G_ARMORMASTB, 'f', 300.0),
     ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
     ("MRO_T_WeaponXPPerAction",  FID_G_WEAPXPPERACT, 'f', 1.0),
+    ("MRO_T_MagicXPPerCost",     FID_G_MAGICXPPERCOST, 'f', 150.0),
     # Papyrus<->DLL bridge globals: accessed via GetFormFromFile /
     # TESDataHandler::LookupForm — deliberately NOT VMAD-wired so they
     # work on saves whose quest instances predate them.

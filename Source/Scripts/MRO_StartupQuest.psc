@@ -585,7 +585,7 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     EndIf
     baseGrant *= XPSpeedFor(idx)   ; per-skill multiplier (weapons default 2.5x)
     Float lvl = (100.0 + n) / 100.0
-    Float needed = ActionsAtZero(idx) * lvl * lvl
+    Float needed = ActionsAtZero(idx) * CurveMult(idx, lvl)
     _mxp[idx] = _mxp[idx] + (baseGrant / needed)
     If _mxp[idx] >= 1.0
         _mxp[idx] = _mxp[idx] - 1.0
@@ -664,7 +664,7 @@ Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
     Int n = currentMastery
     While remaining > 0.0 && n < capInt
         Float lvl = (100.0 + (n as Float)) / 100.0
-        Float needed = ActionsAtZero(idx) * lvl * lvl
+        Float needed = ActionsAtZero(idx) * CurveMult(idx, lvl)
         Float togo = (1.0 - _mxp[idx]) * needed   ; actions left to the next level
         If remaining < togo
             _mxp[idx] = _mxp[idx] + (remaining / needed)
@@ -687,24 +687,41 @@ Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
     EndIf
 EndFunction
 
+; Per-level cost multiplier, applied to ActionsAtZero. Weapons (idx 0-2) and
+; magic (idx 5-9) use a STEEP endgame curve so the top mastery levels cost far
+; more than the first: 0.30*L^3 + 0.70*L^4, which is 1.0 at L=1 (so the first
+; level's cost is unchanged) and 13.34 at L=1.99 (so 199->200 is ~3.4x the L^2
+; value). Armor (3-4), crafting (10-12) and Speech (13) stay on the gentler
+; L^2. L = (100 + masteryLevel) / 100.
+Float Function CurveMult(Int idx, Float lvl)
+    If idx <= 2 || (idx >= 5 && idx <= 9)
+        Return 0.30 * lvl * lvl * lvl + 0.70 * lvl * lvl * lvl * lvl
+    EndIf
+    Return lvl * lvl
+EndFunction
+
 ; Actions for the skill-100 -> 101 step, per skill (SkillIndex order).
 ; Weapon actions are now NORMALIZED hits (v0.9.1): the DLL banks ~1 per solid
-; hit. With the 2.5x weapon XP-speed default, first-level cost in real hits is
-; ActionsAtZero/2.5: 1H=60, 2H=36, bow=30 hits. The relative order (1H>2H>bow)
-; compensates for hit FREQUENCY (1H lands more swings per fight than a bow), so
-; fights train at rough parity. Tune globally via MRO_T_WeaponXPPerAction.
-; Non-weapon skills below keep their own action units (casts/ticks/sessions):
+; hit. All three weapon skills share the SAME steep curve L (0.30*L^3+0.70*L^4
+; in GrantMasteryXPAmount) but keep per-weapon BASES for fight-parity: 1H lands
+; more swings per fight than a bow, so 1H's base is higher. With the 2.5x speed
+; default, ActionsAtZero/2.5 = first-level hits: 1H=90, 2H=54, bow=45; the same
+; curve carries the cap (199->200) to 1H=1200, 2H=720, bow=600. Tune globally
+; via MRO_T_WeaponXPPerAction.
+; Magic (5-9) shares the weapons' steep curve (see CurveMult) but keeps its own
+; action unit: 1 action = MRO_T_MagicXPPerCost (150) magicka spent. Armor/
+; crafting/speech below stay on L^2. Action units per skill:
 ;   Destr 1.35*200cost=270 -> 59          Resto 2.0*80=160 -> 99
 ;   Alter 3.0*200=600 -> 26               Conj  2.1*200=420 -> 38
 ;   Illus 4.6*150=690 -> 23               Smith 160/item, ~5/session
 ;   Alch  ~110/potion, ~5/session         Ench  900/item, ~2/session
 Float Function ActionsAtZero(Int idx)
     If idx == 0
-        Return 150.0    ; OneHanded normalized hits (~60 real hits/level)
+        Return 225.0    ; OneHanded  (~90 hits at 100->101, ~1200 at 199->200)
     ElseIf idx == 1
-        Return 90.0     ; TwoHanded normalized hits (~36 real hits/level)
+        Return 135.0    ; TwoHanded  (~54 hits at 100->101, ~720 at 199->200)
     ElseIf idx == 2
-        Return 75.0     ; Marksman normalized shots (~30 real shots/level)
+        Return 112.5    ; Marksman   (~45 shots at 100->101, ~600 at 199->200)
     ElseIf idx <= 4
         Return 45.0     ; Light/Heavy Armor 30s combat ticks
     ElseIf idx == 5
@@ -828,22 +845,36 @@ Function GrantSpellMasteryXP(Spell sp)
         Return
     EndIf
     String school = eff.GetAssociatedSkill()
+    ; Cost-weighted XP: each cast grants (effective magicka cost / divisor)
+    ; actions, so a big expensive spell trains far more than cheap spam and
+    ; there is no farming the fastest novice spell. Divisor is tunable via
+    ; MRO_T_MagicXPPerCost (default 150 magicka = 1 action; higher = slower).
+    ; A fully cost-reduced (free) spell costs 0 -> earns 0, by design.
+    Float divisor = 150.0
+    GlobalVariable mc = Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable
+    If mc && mc.GetValue() > 0.0
+        divisor = mc.GetValue()
+    EndIf
+    Float castXP = (sp.GetEffectiveMagickaCost(PlayerRef) as Float) / divisor
+    If castXP <= 0.0
+        Return
+    EndIf
     Bool inCombat = PlayerRef.IsInCombat()
     ; Illusion and Alteration are utility schools cast mostly outside a
     ; fight — they train anytime. Destruction/Restoration/Conjuration
     ; require combat (no wall-casting to farm XP).
     If school == "Alteration" && PlayerRef.GetBaseActorValue("Alteration") >= 100.0
-        GrantMasteryXP(ID_AL, GetMasteryLevel(ID_AL))
+        GrantMasteryXPAmount(ID_AL, GetMasteryLevel(ID_AL), castXP)
     ElseIf school == "Illusion" && PlayerRef.GetBaseActorValue("Illusion") >= 100.0
-        GrantMasteryXP(ID_IL, GetMasteryLevel(ID_IL))
+        GrantMasteryXPAmount(ID_IL, GetMasteryLevel(ID_IL), castXP)
     ElseIf !inCombat
         Return
     ElseIf school == "Destruction" && PlayerRef.GetBaseActorValue("Destruction") >= 100.0
-        GrantMasteryXP(ID_DS, GetMasteryLevel(ID_DS))
+        GrantMasteryXPAmount(ID_DS, GetMasteryLevel(ID_DS), castXP)
     ElseIf school == "Restoration" && PlayerRef.GetBaseActorValue("Restoration") >= 100.0
-        GrantMasteryXP(ID_RS, GetMasteryLevel(ID_RS))
+        GrantMasteryXPAmount(ID_RS, GetMasteryLevel(ID_RS), castXP)
     ElseIf school == "Conjuration" && PlayerRef.GetBaseActorValue("Conjuration") >= 100.0
-        GrantMasteryXP(ID_CJ, GetMasteryLevel(ID_CJ))
+        GrantMasteryXPAmount(ID_CJ, GetMasteryLevel(ID_CJ), castXP)
     EndIf
 EndFunction
 

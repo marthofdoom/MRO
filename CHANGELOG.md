@@ -4,6 +4,32 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.2 — 2026-07-08
+
+### Changed
+- **Steeper endgame mastery curve for weapons and magic.** The top mastery
+  levels now cost far more than the first: cost = `ActionsAtZero · (0.30·L³ +
+  0.70·L⁴)` where `L = (100+level)/100`. It equals `1.0` at L=1 (so first-level
+  cost is unchanged) and `13.34` at L=1.99 (so 199→200 is ~3.4× the old L²).
+  One-Handed now runs ~90 hits at 100→101 → ~1,200 at 199→200 (2H ~54→720,
+  bow ~45→600, same curve, per-weapon bases for fight-parity). Armor, crafting
+  and Speech keep the gentler L². Curve is shared via one `CurveMult` helper so
+  the two paths can't diverge.
+- **Magic mastery XP is now cost-weighted** instead of a flat +1 per cast: each
+  cast grants `effective magicka cost / MRO_T_MagicXPPerCost` actions (new
+  global, default **150** magicka = 1 action; higher = slower). Bigger spells
+  train far more than cheap ones and spamming the fastest novice spell no longer
+  farms XP; a fully cost-reduced (free) spell earns nothing, by design. The
+  combat gate on Destruction/Restoration/Conjuration is unchanged. Per-school
+  balance is dialable with the existing per-skill XP-speed sliders. Magicka to
+  first mastery level: Illusion 3,750 / Alteration 4,500 / Conjuration 6,000 /
+  Destruction 9,000 / Restoration 15,000 (150 divisor).
+
+### Notes
+- Papyrus + one new global only — **MRO.dll is byte-identical to v0.9.1**, so
+  the load banner still reports v0.9.1; the MCM version (0.9.2) is the package
+  check. Save-safe over v0.9.x (additive global, `GetFormFromFile` bridge).
+
 ## v0.9.1 — 2026-07-08
 
 ### Changed
