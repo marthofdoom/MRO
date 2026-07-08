@@ -4,6 +4,35 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.0 — 2026-07-08
+
+### Changed
+- **Weapon mastery XP reworked to damage-scaled (Model 2).** The native DLL
+  now measures the player's *credited* weapon damage per hit — capped at the
+  target's remaining HP, so overkill on trivial mobs earns nothing — and
+  banks it per weapon skill; Papyrus drains it on the heartbeat through the
+  existing L^2 curve. One-Handed and Two-Handed now train at parity, tanky
+  enemies pay proportionally, and swing-farming weak mobs is self-limiting.
+  The DLL only measures; Papyrus owns the curve and level-ups. Rides the
+  existing DR weapon-hit hook (no new hook site). Rationale and the rejected
+  kill-weighted alternative are in `docs/WEAPON_XP_MODELS.md`.
+- Tunable: `MRO_T_WeaponXPPerAction` (default 50 = damage per XP "action";
+  lower trains faster). Stacks with the global and per-skill speed dials.
+- Mastery rows in the MCM drop the redundant `+N%` — it was the level as a
+  percent of cap, not the gameplay bonus. The unit-correct per-skill bonus
+  is (and was) in the row's hover text.
+
+### Removed
+- **Cell reset retired** (default OFF + one-time migration force-off).
+  Lowering the respawn timers was too broad: it also returned display/quest
+  items to cells and reverted one-time activators (e.g. Blackreach lifts).
+  The load order's own respawn timers apply again on the next load.
+
+### Notes
+- Save-safe over v0.8.x: new globals use the `GetFormFromFile` bridge (not
+  quest-baked), so no VMAD migration; FormIDs are additive. MCM settings
+  persist. DR and elemental absorb are unchanged from v0.8.2.
+
 ## v0.8.2 — 2026-07-06
 
 ### Changed

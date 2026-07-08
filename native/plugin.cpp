@@ -410,7 +410,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.8.0 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.0 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -448,7 +448,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.8.0 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.0 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }
