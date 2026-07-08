@@ -64,7 +64,7 @@ FID_G_ABSORBMAX    = OWN | 0x812  # tuning: resist at which absorb = 100% (defau
 FID_G_DR99ARMOR    = OWN | 0x813  # tuning: armor rating where DR reaches 99% (default 2000)
 FID_G_ARMORMASTB   = OWN | 0x814  # tuning: armor mastery bonus at cap (default 300)
 FID_G_WEAPMASTB    = OWN | 0x815  # tuning: weapon mastery bonus %% at cap (default 50)
-FID_G_WEAPXPPERACT = OWN | 0x808  # tuning: effective weapon damage per mastery-XP "action" (default 50); Model 2, docs/WEAPON_XP_MODELS.md
+FID_G_WEAPXPPERACT = OWN | 0x808  # tuning: normalized hits per mastery-XP "action", dimensionless (default 1.0, higher = slower); v0.9.1 normalized model, docs/WEAPON_XP_MODELS.md
 FID_EVENTS_MGEF    = OWN | 0x816  # hidden AME hosting PO3 event receivers
 FID_EVENTS_SPELL   = OWN | 0x817  # always-on ability carrying it
 FID_G_LAFRAC       = OWN | 0x818  # bridge: player Evasion mastery fraction 0-100 (Papyrus->DLL)
@@ -225,7 +225,7 @@ GLOBALS = [
     ("MRO_T_DR99Armor",    FID_G_DR99ARMOR,   'f', 2000.0),
     ("MRO_T_ArmorMasteryBonus",  FID_G_ARMORMASTB, 'f', 300.0),
     ("MRO_T_WeaponMasteryBonus", FID_G_WEAPMASTB,  'f', 50.0),
-    ("MRO_T_WeaponXPPerAction",  FID_G_WEAPXPPERACT, 'f', 50.0),
+    ("MRO_T_WeaponXPPerAction",  FID_G_WEAPXPPERACT, 'f', 1.0),
     # Papyrus<->DLL bridge globals: accessed via GetFormFromFile /
     # TESDataHandler::LookupForm — deliberately NOT VMAD-wired so they
     # work on saves whose quest instances predate them.

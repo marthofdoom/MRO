@@ -1,9 +1,13 @@
 # Weapon Mastery XP — model mockup (Model 1 vs Model 2)
 
-Status: **DECIDED — Model 2 (damage-scaled, overkill excluded).**
-Chosen after the comparison below; implementation is native (the DR
-weapon-hit hook already carries the damage + remaining HP). Model 1 is
-retained here only as the rejected alternative and the rationale trail.
+Status: **SHIPPED — Model 2, normalized (v0.9.1).** v0.9.0 shipped raw
+damage-scaled Model 2; in-game testing showed the pace ran away because
+raw damage is an absolute quantity — it scales with the load order's damage
+economy and with build power, so strong endgame builds level far too fast.
+v0.9.1 keeps Model 2's structure (overkill excluded, weapon-agnostic) but
+**normalizes each hit by the player's own typical per-hit damage**, so the
+XP unit is dimensionless. See "Normalized model (v0.9.1)" below. Model 1 is
+retained only as the rejected alternative and the rationale trail.
 
 Purpose: honestly
 compare two ways to make weapon masteries level at a fair rate, because
@@ -113,3 +117,53 @@ per-hit or per-kill, and how this scales against the list's base
 progression speed read from `experience.ini` (see the load-order-aware
 regenerator work — the same "XP per fight" number has to sit sensibly
 next to how fast the base game levels).
+
+## Normalized model (v0.9.1) — the shipped refinement
+
+**Problem with raw Model 2 (v0.9.0):** it banked `min(damage, remaining)`
+directly, so "damage" is an absolute number. The XP rate `Σdamage / D`
+therefore varied with (a) the load order — a 30-per-swing list and a
+400-per-swing list run ~13× apart through the same `D` — and (b) build
+power — a buffed endgame character banks more per hit than a fresh one for
+identical work, so the strong level faster (rich-get-richer runaway). No
+value of `D` fixes this, because `D` is itself an absolute damage constant.
+
+**Fix — normalize by your own typical hit.** Divide each credited hit by a
+reference damage `ref` that tracks the player's per-hit output, so `credited
+/ ref` is dimensionless: **one banked action ≈ one typical connecting hit.**
+
+```
+ref  = EMA of the player's per-hit damage on this weapon skill (per 1H/2H/bow)
+bank += min(damage, remaining) / ref     // overkill still excluded
+```
+
+`ref` is a per-skill exponential moving average maintained in the DLL
+(`avg = 0.9*avg + 0.1*damage`, seeded on the first hit, session-scoped —
+re-converges in a few hits after a load, so it is deliberately not
+save-persisted). Each hit is measured against the *prior* EMA, so a power
+attack or sneak crit above your average banks >1 and a chip hit <1.
+
+**Properties**
+- **Load-order invariant:** `ref` scales with the list, so the unit cancels.
+  Same fight → same actions on any list. (Was the whole complaint.)
+- **Build invariant:** `ref` scales with your buffs too, so getting stronger
+  no longer inflates XP — it kills the runaway.
+- **Damage still counts:** harder-than-typical hits bank more, softer less;
+  tankier enemies still pay proportionally (more hits to kill).
+- **Trash still self-limiting:** overkill cap makes a one-shot bank `≈
+  remaining/ref ≈ 0`. Farm hole stays closed, no special-casing.
+- Converges toward "hits-to-kill" pacing (close to Model 1) but **without**
+  Model 1's power-attack farm hole or backwards 1H/2H bias.
+
+**Curve / tuning.** The bucket now feeds the shared `L²` curve in normalized
+hits. With the 2.5× weapon XP-speed default, the first mastery level (100→101)
+costs `ActionsAtZero/2.5` real hits: **1H 60, 2H 36, bow 30** (`ActionsAtZero`
+= 150/90/75). The relative order compensates for hit *frequency* (1H lands
+more swings per fight than a bow), so fights train at rough parity.
+`MRO_T_WeaponXPPerAction` is repurposed from "damage per action" to a
+dimensionless **pace dial** (hits per action; higher = slower), default 1.0 —
+tune live with `set MRO_T_WeaponXPPerAction to <n>`.
+
+**Coupling.** The DLL (banks normalized actions) and Papyrus (`perAction`
+default 1.0) MUST ship together: old DLL banking raw damage + new Papyrus
+dividing by 1.0 would run ~50× fast. Both land in v0.9.1.

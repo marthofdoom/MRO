@@ -157,12 +157,20 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     a_hitData.totalDamage *= k;
 }
 
-// Model 2 weapon-mastery XP (docs/WEAPON_XP_MODELS.md): bank the player's
-// credited weapon damage — capped at the target's remaining HP so overkill
-// on a trivial mob earns nothing — into a per-weapon-skill bridge global.
+// Weapon-mastery XP (docs/WEAPON_XP_MODELS.md, v0.9.1 normalized model):
+// bank the player's credited weapon damage — capped at the target's
+// remaining HP so overkill on a trivial mob earns nothing — into a
+// per-weapon-skill bridge global, NORMALIZED by a running average of the
+// player's own per-hit damage so one banked "action" == one typical hit.
 // Papyrus drains it on its heartbeat and owns the XP curve and level-ups;
 // the DLL only measures. Runs inside the weapon-hit thunk BEFORE the
 // original applies the hit, so the victim still holds pre-hit health.
+//
+// EMA of the player's per-hit damage per weapon skill (0=1H, 1=2H, 2=bow).
+// Session-scoped and self-seeding: it re-converges in a few hits after a
+// load, so it deliberately is not save-persisted.
+static float g_avgHitDmg[3] = {0.0f, 0.0f, 0.0f};
+
 void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     if (!g_pendOH || !g_pendTH || !g_pendMK || !a_victim) {
         return;
@@ -184,20 +192,36 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     }
 
     RE::TESGlobal* bucket = nullptr;
+    int idx = -1;
     switch (weapon->weaponData.skill.get()) {
-    case RE::ActorValue::kOneHanded: bucket = g_pendOH; break;
-    case RE::ActorValue::kTwoHanded: bucket = g_pendTH; break;
-    case RE::ActorValue::kArchery:   bucket = g_pendMK; break;
+    case RE::ActorValue::kOneHanded: bucket = g_pendOH; idx = 0; break;
+    case RE::ActorValue::kTwoHanded: bucket = g_pendTH; idx = 1; break;
+    case RE::ActorValue::kArchery:   bucket = g_pendMK; idx = 2; break;
     default: return;  // staves / hand-to-hand: no weapon mastery
     }
 
+    const float dmg = a_hitData.totalDamage;
+    if (dmg <= 0.0f) {
+        return;
+    }
     const float remaining = a_victim->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
-    float credited = a_hitData.totalDamage;
+
+    // Reference = the player's typical per-hit damage on this skill (prior
+    // EMA, seeded with this hit on the first swing). Crediting credited/ref
+    // makes one banked action == one typical hit, so the XP rate is invariant
+    // to the load order's damage economy AND to build power. A power attack or
+    // sneak crit above your average counts >1; a chip hit <1. See
+    // docs/WEAPON_XP_MODELS.md (v0.9.1 normalized model).
+    float& avg = g_avgHitDmg[idx];
+    const float ref = (avg > 0.0f) ? avg : dmg;
+    avg = (avg <= 0.0f) ? dmg : (0.9f * avg + 0.1f * dmg);
+
+    float credited = dmg;
     if (credited > remaining) {
         credited = remaining;  // overkill earns nothing
     }
-    if (credited > 0.0f) {
-        bucket->value += credited;
+    if (credited > 0.0f && ref > 0.0f) {
+        bucket->value += credited / ref;  // dimensionless: ~one hit == one action
     }
 }
 
@@ -406,11 +430,11 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         // native buckets instead of its per-hit grant (Model 2).
         if (g_drHookLive && g_nativeWeaponXP) {
             g_nativeWeaponXP->value = 1.0f;
-            spdlog::info("Native weapon-XP measuring active (rides DR hook): MRO_G_NativeWeaponXP=1");
+            spdlog::info("Native weapon-XP measuring active (rides DR hook, normalized): MRO_G_NativeWeaponXP=1");
         }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.0 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.1 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -448,7 +472,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.0 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.1 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

@@ -604,16 +604,17 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
 EndFunction
 
 ; ===============================================================
-; NATIVE WEAPON XP DRAIN (Model 2 - docs/WEAPON_XP_MODELS.md)
-; The DLL banks the player's credited weapon damage (capped at the
-; target's remaining HP, so overkill on trivial mobs earns nothing) into
-; MRO_X_Pend{OH,TH,MK}. Each heartbeat we convert that damage to mastery
-; "actions" (WeaponXPPerAction damage = 1 action) and feed the SAME L^2
-; curve the per-hit grant uses, so 1H and 2H train at parity and tanky
-; enemies pay proportionally more.
+; NATIVE WEAPON XP DRAIN (normalized model v0.9.1 - docs/WEAPON_XP_MODELS.md)
+; The DLL banks NORMALIZED actions into MRO_X_Pend{OH,TH,MK}: each credited
+; hit (capped at the target's remaining HP, so overkill earns nothing) is
+; divided by the player's own typical per-hit damage, so ~one solid hit == one
+; action regardless of the load order's damage economy or the player's build
+; power. Each heartbeat we feed those actions into the SAME L^2 curve the
+; other skills use. WeaponXPPerAction is now a dimensionless pace dial
+; (hits per action; higher = slower), default 1.0.
 ; ===============================================================
 Function DrainNativeWeaponXP()
-    Float perAction = 50.0
+    Float perAction = 1.0
     GlobalVariable pa = Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable
     If pa && pa.GetValue() > 0.0
         perAction = pa.GetValue()
@@ -687,20 +688,23 @@ Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
 EndFunction
 
 ; Actions for the skill-100 -> 101 step, per skill (SkillIndex order).
-; Derived from vanilla AVSK (improveMult * 100^1.95 / XP-per-action):
-;   OneHanded  6.3*14dmg=88/act -> 181    TwoHanded 5.95*24=143 -> 111
-;   Marksman   9.3*19=177 -> 90           armor ~115/hit, ~3 hits/tick
+; Weapon actions are now NORMALIZED hits (v0.9.1): the DLL banks ~1 per solid
+; hit. With the 2.5x weapon XP-speed default, first-level cost in real hits is
+; ActionsAtZero/2.5: 1H=60, 2H=36, bow=30 hits. The relative order (1H>2H>bow)
+; compensates for hit FREQUENCY (1H lands more swings per fight than a bow), so
+; fights train at rough parity. Tune globally via MRO_T_WeaponXPPerAction.
+; Non-weapon skills below keep their own action units (casts/ticks/sessions):
 ;   Destr 1.35*200cost=270 -> 59          Resto 2.0*80=160 -> 99
 ;   Alter 3.0*200=600 -> 26               Conj  2.1*200=420 -> 38
 ;   Illus 4.6*150=690 -> 23               Smith 160/item, ~5/session
 ;   Alch  ~110/potion, ~5/session         Ench  900/item, ~2/session
 Float Function ActionsAtZero(Int idx)
     If idx == 0
-        Return 360.0    ; OneHanded landed hits (2x vanilla-derived rate)
+        Return 150.0    ; OneHanded normalized hits (~60 real hits/level)
     ElseIf idx == 1
-        Return 220.0    ; TwoHanded landed hits
+        Return 90.0     ; TwoHanded normalized hits (~36 real hits/level)
     ElseIf idx == 2
-        Return 180.0    ; Marksman landed shots
+        Return 75.0     ; Marksman normalized shots (~30 real shots/level)
     ElseIf idx <= 4
         Return 45.0     ; Light/Heavy Armor 30s combat ticks
     ElseIf idx == 5

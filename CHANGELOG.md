@@ -4,6 +4,28 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.1 — 2026-07-08
+
+### Changed
+- **Weapon mastery XP normalized (fixes v0.9.0 runaway pace).** v0.9.0
+  banked *raw* credited damage, which is an absolute number — so the XP rate
+  scaled with the load order's damage economy and with build power, and
+  strong endgame characters leveled far too fast. The DLL now divides each
+  credited hit by a running average of the player's own per-hit damage, so
+  one banked "action" ≈ one typical connecting hit. The rate is now invariant
+  to the load order and to build power; harder-than-usual hits still count
+  more, tanky enemies still pay proportionally, and overkill on trash is
+  still self-limiting. See `docs/WEAPON_XP_MODELS.md` (normalized model).
+- `MRO_T_WeaponXPPerAction` is repurposed from "damage per action" to a
+  dimensionless pace dial (hits per action; higher = slower), **default 1.0**.
+  First mastery level now costs ~60 hits (1H), ~36 (2H), ~30 (bow), scaling
+  with the L² curve.
+
+### Notes
+- DLL and scripts must be installed together (the bucket units changed);
+  the full package handles this. Save-safe over v0.9.0 — bridge globals are
+  unchanged, only their meaning/scale. DR and elemental absorb untouched.
+
 ## v0.9.0 — 2026-07-08
 
 ### Changed
