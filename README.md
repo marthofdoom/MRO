@@ -35,6 +35,38 @@ and the SKSE plugin builds on GitHub Actions.
   sliders (mastery cap, XP speed, DR/absorb targets), and a live status
   panel showing your real DR% and per-element absorb.
 
+## FAQ
+
+**Doesn't this ruin Requiem's balance?**
+It doesn't touch early or mid game, and it changes nothing about enemies —
+their stats, encounter design, and lethality are all intact. Every MRO
+feature sits *past* the point where a vanilla-Requiem character has already
+hit the skill, armor, and resistance ceilings and stopped progressing. It
+extends the top of the curve; it doesn't reshape the rest of it.
+
+**Isn't it too easy to become overpowered?**
+Getting there is a long, earned road. A mastery skill only *begins* at base
+100 — already a major Requiem investment — and then trains through real use
+on vanilla's cost curve extended past the cap, so each mastery level costs
+progressively more. Weapon XP is damage-scaled and excludes overkill, so you
+can't farm weak mobs to shortcut it; it rewards genuine fights. The headline
+ceilings raise the bar further: 99% physical DR needs best-in-list gear *and*
+full armor mastery, and elemental absorb only begins once you've stacked a
+resistance past 100%, itself a deliberate build. There is no quick path to
+the top.
+
+**Can I turn it down, or off?**
+Yes. Every feature toggles independently in the MCM, and the numbers are
+sliders — mastery cap, global and per-skill XP speed, and the DR and absorb
+targets among them. If a feature isn't to your taste, switch it off; if only
+the pacing is, tune it.
+
+**Is it symmetric?**
+The power you gain is proportional to the investment you put into a character
+you've already built. Enemies keep their Requiem stats; nothing about them is
+weakened. This is continued progression for the player, not a difficulty
+reduction.
+
 ## Install
 
 Install the package with your mod manager (FOMOD in `MRO-flat/`, or the flat
