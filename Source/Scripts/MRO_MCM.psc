@@ -91,6 +91,14 @@ EndFunction
 ; no matter how old the save is.
 Function OnConfigOpen()
     SetupPages()
+    ; No heartbeat republishes the mastery fraction the native DR calc reads, so
+    ; do it on MCM open: otherwise an out-of-band mastery change (console set, or
+    ; the cap slider) won't reach the DR ladder until the next load or level-up.
+    ; Safe now that the 30s tick is gone (no quest instance-lock to block on).
+    MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+    If q
+        q.PublishBridgeGlobals()
+    EndIf
 EndFunction
 
 Function SetupPages()
