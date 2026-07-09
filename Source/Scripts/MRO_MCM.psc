@@ -3,7 +3,7 @@ Scriptname MRO_MCM extends SKI_ConfigBase
 Quest           Property MRO_Quest              Auto
 
 ; Stamped by release.sh — do not edit by hand
-String Property MRO_VERSION = "0.9.3" AutoReadOnly
+String Property MRO_VERSION = "0.9.4" AutoReadOnly
 
 GlobalVariable  Property MRO_MasteryEnabled     Auto
 GlobalVariable  Property MRO_MasteryBaseGrant   Auto
