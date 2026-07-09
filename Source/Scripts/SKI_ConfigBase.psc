@@ -48,6 +48,12 @@ EndEvent
 Event OnOptionHighlight(Int a_option)
 EndEvent
 
+; Non-native in the real base: does version check + config-manager registration.
+; Declared here only so MRO_MCM can override it and call parent.OnGameReload().
+; This empty body is never shipped — SkyUI's real .pex runs at load time.
+Function OnGameReload()
+EndFunction
+
 Int Function AddHeaderOption(String a_text, Int a_flags = 0) native
 Int Function AddTextOption(String a_text, String a_value, Int a_flags = 0) native
 Int Function AddToggleOption(String a_text, Bool a_checked, Int a_flags = 0) native

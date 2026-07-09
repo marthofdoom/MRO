@@ -3,7 +3,7 @@ Scriptname MRO_MCM extends SKI_ConfigBase
 Quest           Property MRO_Quest              Auto
 
 ; Stamped by release.sh — do not edit by hand
-String Property MRO_VERSION = "0.9.4" AutoReadOnly
+String Property MRO_VERSION = "0.9.5" AutoReadOnly
 
 GlobalVariable  Property MRO_MasteryEnabled     Auto
 GlobalVariable  Property MRO_MasteryBaseGrant   Auto
@@ -54,20 +54,34 @@ Event OnConfigInit()
     SetupPages()
 EndEvent
 
-; SkyUI caches ModName/Pages in the SAVE at first registration and only
-; refreshes them when the config's version increments. Without this, a save
-; that first registered an older MRO shows its old tabs forever (e.g. the
-; "Boss Readiness" page dropped in 0.8.0) even after the scripts update, and
-; `setstage SKI_ConfigManagerInstance 1` will NOT clear it because the version
-; never changed. Bumping GetVersion makes SkyUI fire OnVersionUpdate on the
-; next load and re-run SetupPages. Increment this whenever ModName/Pages change.
+; SkyUI caches ModName/Pages in the SAVE. The documented refresh path is to
+; bump GetVersion so CheckVersion() fires OnVersionUpdate on the next load --
+; but that path proved unreliable in the field: once a save has recorded a
+; given version, or if the delta fires but the flash tab cache never rebuilds,
+; stale tabs (e.g. the long-gone "Boss Readiness" page) persist forever and
+; `setstage SKI_ConfigManagerInstance 1` does NOT clear them.
+;
+; Nuclear fix: don't trust the version delta at all. OnGameReload below
+; re-asserts ModName + Pages and forces a page reset on EVERY load, so the
+; config can never be stuck on old identity regardless of stored version.
+; GetVersion is still bumped as belt-and-suspenders for the first-install path.
 Int Function GetVersion()
-    Return 2
+    Return 3
 EndFunction
 
 Event OnVersionUpdate(Int a_version)
     SetupPages()
 EndEvent
+
+; Runs on every game load (base calls CheckVersion here; we add an
+; unconditional self-heal on top). Setting Pages here means the next time the
+; MCM opens, SkyUI's setPageNames pushes the current tab list and any stale
+; page vanishes; setting ModName refreshes the title on the next page draw.
+Function OnGameReload()
+    parent.OnGameReload()
+    SetupPages()
+    ForcePageReset()
+EndFunction
 
 Function SetupPages()
     ModName = "marth Requiem Overhaul"

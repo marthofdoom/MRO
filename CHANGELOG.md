@@ -4,6 +4,17 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.5 — 2026-07-08 (alpha)
+
+### Fixed
+- **MCM self-heal, nuclear.** v0.9.4's version-bump approach relied on SkyUI's
+  `CheckVersion` firing `OnVersionUpdate` on the next load — which did not clear
+  stale tabs (e.g. the long-gone "Boss Readiness" page) on affected saves, and
+  `setstage SKI_ConfigManagerInstance 1` never helped. The config now re-asserts
+  its ModName + Pages and forces a page reset on **every game load**
+  (`OnGameReload`), independent of any stored version, so it can no longer be
+  stuck on an old menu. No console command needed — just load the save once.
+
 ## v0.9.4 — 2026-07-08 (alpha)
 
 ### Added
