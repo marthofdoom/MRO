@@ -1044,13 +1044,25 @@ Float Function GetCurrentDRPct()
     Return d
 EndFunction
 
-; Progress within the current mastery level, 0-100.
+; Progress within the current mastery level, 0-100. Reads the RATIO GLOBAL,
+; not _mxp: the DLL credits weapon/armor XP natively and writes the globals
+; directly, so _mxp goes stale for those skills (MCM showed 69% while the
+; real ratio sat at 99% -- "weapon XP not working", 2026-07-09). The globals
+; are canonical for every skill: Papyrus-credited ones sync _mxp -> global
+; on each grant. _mxp remains only as a fallback for a missing global.
 Float Function GetMasteryProgressPct(String skillId)
     Int idx = SkillIndex(skillId)
-    If idx < 0 || !_mxp
+    If idx < 0
         Return 0.0
     EndIf
-    Return _mxp[idx] * 100.0
+    GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
+    If rg
+        Return rg.GetValue() * 100.0
+    EndIf
+    If _mxp
+        Return _mxp[idx] * 100.0
+    EndIf
+    Return 0.0
 EndFunction
 
 Function GrantSpellMasteryXP(Spell sp)
