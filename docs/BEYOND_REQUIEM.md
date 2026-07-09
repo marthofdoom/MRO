@@ -184,23 +184,28 @@ through existing globals, that's a mechanism gap to close first, not a profile.
 - **Profiles:** **Vanilla**, **Any / generic**, and an **Experience.ini-driven**
   profile. Only **Requiem** gets bespoke treatment; everything else is one of
   those three.
-- **DR-past-cap off-Requiem:** keep armor masteries as **flat bonuses, drop the
-  past-cap ladder** — BUT first settle *how armor behaves on non-Requiem lists*
-  (see below; the flat +armor bonus may be a no-op at a reachable vanilla cap).
+- **Armor is UNIFORM across profiles (revised 2026-07-08).** No profile-specific
+  armor branch: the C# regenerator calibrates the `DR99Armor` target to each load
+  order's armor economy (Requiem or not), so the **DR-past-cap ladder stays in
+  every configuration** — it's gated behind the armor-mastery grind, so it isn't
+  free god-mode even where armor caps easily. Also: the **armor mastery XP curve
+  moves onto the steep weapon curve (`0.30L³+0.70L⁴`) in every config** (off `L²`),
+  so armor has the same long endgame as weapons. *(Supersedes the earlier
+  "flat bonuses, drop the ladder" call and closes the open armor question below.)*
+  IMPLEMENTATION PENDING: steep armor curve = change `CurveMult` idx 3-4 in both
+  `MRO_StartupQuest.psc` and `native/plugin.cpp`; bundle with the next build.
 - **Detection depth:** distinguish Requiem vs Experience.ini vs Vanilla/generic
   (medium — plugin presence + the Experience.ini check).
 - **Name:** keep the **MRO** initials/plugin (`MRO.esp` for save-compat); change
   only what the letters stand for (drop "Requiem" from the expansion).
 
-### OPEN — armor behavior on non-Requiem lists (to resolve before the Vanilla profile)
-Vanilla armor converts rating → DR at `fArmorScalingFactor` (~0.12%/point) up to
-`fMaxArmorRating` (~80% DR), and a full smithed set reaches that cap easily — the
-opposite of Requiem, where armor is scarce and the cap is a long grind (which is
-what the 75→99% mastery ladder rewards). Consequence: on a vanilla list a flat
-**+armor-rating** mastery bonus is often a **no-op at endgame** (already capped).
-So the non-Requiem armor mastery likely needs a *different* reward than "+armor":
-e.g. a small flat DR inside the cap, a modest cap raise, or a defensive capstone
-(stagger/stamina). Decide this when we build the Vanilla profile.
+### RESOLVED — armor behavior on non-Requiem lists (2026-07-08)
+The concern was that vanilla armor caps easily (~80% DR at a reachable rating),
+so a flat +armor bonus is a no-op at endgame and the DR ladder could be free
+god-mode. Resolution: **keep the same design everywhere**, because the
+regenerator calibrates `DR99Armor` to the list AND the ladder requires full armor
+mastery (a long grind) to reach 99% — `ceiling = cap + (99-cap)*masteryFrac`. So
+the ladder is earned, not handed out, on any list. No profile-specific armor.
 
 ## 5b. Decisions to make (after the v0.9.6 playtest)
 
