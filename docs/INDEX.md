@@ -18,6 +18,10 @@ from these docs alone. Load documents on demand, not all at once.
    per system.
 5. **DYNAMIC_OR_DROP.md** (before adding features / planning 1.0) — the
    portability ledger and the native-hybrid direction.
+6. **BEYOND_REQUIEM.md** (planning the real 1.0) — the list-profile plan:
+   MRO as a framework with Requiem as its first detected profile, the
+   Requiem-coupling ledger per system, and the decisions to make for
+   non-Requiem lists.
 
 ## Tools (use instead of re-deriving)
 
