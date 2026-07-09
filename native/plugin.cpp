@@ -36,7 +36,7 @@ constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
-// Mastery XP is now applied natively (v0.9.9): the DLL reads the same knobs the
+// Mastery XP is now applied natively (v0.9.10): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
 // 30s Papyrus drain tick is retired. Config + per-skill state globals:
 constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
@@ -174,7 +174,7 @@ void DoubleVendorGold() {
     spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
-// ── Mastery XP: native curve + level-ups (v0.9.9) ────────────────────
+// ── Mastery XP: native curve + level-ups (v0.9.10) ────────────────────
 // Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
 // CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
 // per-hit hook changes nothing about pacing. Only weapon (0-2) and armor (3-4)
@@ -253,7 +253,7 @@ public:
     }
 };
 
-// Per-level cost multiplier — matches MRO_StartupQuest.CurveMult. As of v0.9.9
+// Per-level cost multiplier — matches MRO_StartupQuest.CurveMult. As of v0.9.10
 // weapons (0-2) AND armor (3-4) share the steep endgame curve, so armor has the
 // same long grind as weapons (the L^2 branch is only crafting/speech, idx>=10,
 // which the DLL never credits).
@@ -297,26 +297,35 @@ bool BaseSkillCapped(RE::Actor* a_player, int a_idx) {
 // level-up, fires MRO_MasteryLevelUp so Papyrus shows the CSF message, refreshes
 // that skill's bonus, and re-publishes the armor DR fraction.
 void Credit(int a_idx, float a_actions) {
+    // DIAGNOSTIC (v0.9.10): log the first ~20 credit attempts with the exact
+    // reason, to find why a skill (1H) stalls at a fixed level/ratio. Bounded.
+    static int s_log = 0;
+    const bool doLog = s_log < 20;
     if (a_idx < 0 || a_idx >= 5 || a_actions <= 0.0f) {
         return;
     }
     if (!g_masteryEna || g_masteryEna->value == 0.0f) {
+        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP mastery disabled", a_idx); }
         return;  // mastery system off: measuring but not awarding
     }
     if (!g_mLvl[a_idx] || !g_mRat[a_idx]) {
+        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP null level/ratio global", a_idx); }
         return;  // ESP out of date
     }
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!BaseSkillCapped(player, a_idx)) {
+        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP base skill not capped", a_idx); }
         return;  // base skill not capped yet
     }
     const int cap = static_cast<int>(g_masteryCap ? g_masteryCap->value : 100.0f);
     int n = static_cast<int>(g_mLvl[a_idx]->value);
     if (n >= cap) {
+        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP at cap n={} cap={}", a_idx, n, cap); }
         return;
     }
     const float baseGrant = (g_masteryGnt ? g_masteryGnt->value : 1.0f) * XpmSpeed(a_idx);
     float ratio = g_mRat[a_idx]->value;
+    const float ratio0 = ratio;
     if (ratio < 0.0f) {
         ratio = 0.0f;
     }
@@ -341,6 +350,11 @@ void Credit(int a_idx, float a_actions) {
     }
     g_mLvl[a_idx]->value = static_cast<float>(n);
     g_mRat[a_idx]->value = ratio;
+    if (doLog) {
+        ++s_log;
+        spdlog::info("credit idx={}: actions={:.3f} baseGrant={:.2f} ratio {:.3f}->{:.3f} level={}",
+                     a_idx, a_actions, baseGrant, ratio0, ratio, n);
+    }
     if (leveled) {
         SendModEvent(kEvtLevelUp, static_cast<float>(a_idx));
     }
@@ -360,7 +374,7 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
         return;
     }
 
-    // DIAGNOSTIC (v0.9.9): the DR ladder must read WORN + PERK armor, not spell-
+    // DIAGNOSTIC (v0.9.10): the DR ladder must read WORN + PERK armor, not spell-
     // fortified AR (wards, flesh spells). GetActorValue = everything (incl.
     // temporary spell modifiers); GetPermanentActorValue = base + permanent
     // (worn + perks). Log both for the player when the total changes, so a
@@ -463,12 +477,31 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
         return;  // no XP for hitting non-hostiles (townsfolk, summons, etc.)
     }
 
+    // Bucket by WEAPON TYPE (from the animation type, always set), NOT
+    // weaponData.skill: modded weapons frequently leave the skill field blank, so
+    // the old skill-based switch silently skipped them (1H not leveling on LoreRim,
+    // 2026-07-09). This mirrors the Papyrus GetWeaponSkill (IsSword/IsBow/...).
+    const auto wtype = weapon->GetWeaponType();
+    static int s_wxpLog = 0;
+    if (s_wxpLog < 10) {
+        ++s_wxpLog;
+        spdlog::info("weapon-XP: player hit, weapon type={} dmg={:.1f}",
+                     static_cast<int>(wtype), a_hitData.totalDamage);
+    }
     int idx = -1;
-    switch (weapon->weaponData.skill.get()) {
-    case RE::ActorValue::kOneHanded: idx = 0; break;
-    case RE::ActorValue::kTwoHanded: idx = 1; break;
-    case RE::ActorValue::kArchery:   idx = 2; break;
-    default: return;  // staves / hand-to-hand: no weapon mastery
+    switch (wtype) {
+    case RE::WEAPON_TYPE::kOneHandSword:
+    case RE::WEAPON_TYPE::kOneHandDagger:
+    case RE::WEAPON_TYPE::kOneHandAxe:
+    case RE::WEAPON_TYPE::kOneHandMace:
+        idx = 0; break;
+    case RE::WEAPON_TYPE::kTwoHandSword:
+    case RE::WEAPON_TYPE::kTwoHandAxe:  // greatsword-class + warhammer both map here
+        idx = 1; break;
+    case RE::WEAPON_TYPE::kBow:
+    case RE::WEAPON_TYPE::kCrossbow:
+        idx = 2; break;
+    default: return;  // staff / hand-to-hand: no weapon mastery
     }
 
     const float dmg = a_hitData.totalDamage;
@@ -781,7 +814,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.9 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.10 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -813,7 +846,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.9 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.10 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

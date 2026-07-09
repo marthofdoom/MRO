@@ -4,6 +4,19 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.10 — 2026-07-09 (alpha)
+
+### Fixed
+- **MCM open republishes the DR-ladder mastery fraction**, so a manual/console
+  mastery change reflects in the physical-DR calc without a save reload (there's
+  no heartbeat to do it anymore).
+- Weapon mastery XP now buckets weapons by **type** (from the animation type)
+  rather than the weapon's `skill` field, which modded weapons often leave blank.
+
+### Diagnostics
+- Logs weapon-XP detection and the per-hit credit outcome (bounded) to trace a
+  mastery skill that stalls at a fixed level/progress.
+
 ## v0.9.9 — 2026-07-09 (alpha)
 
 ### Fixed
