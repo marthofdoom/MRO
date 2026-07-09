@@ -20,6 +20,13 @@ if [[ -e "$DEST" ]]; then
     exit 1
 fi
 
+# Every release ships with its changelog entry — enforced mechanically because
+# the convention was silently skipped once (v0.9.12, backfilled after the fact).
+if ! grep -q "^## v${VER}" CHANGELOG.md; then
+    echo "ERROR: CHANGELOG.md has no '## v${VER}' entry. Write the changelog first." >&2
+    exit 1
+fi
+
 # Stamp version into the MCM and recompile all scripts
 sed -i "s/MRO_VERSION = \"[^\"]*\"/MRO_VERSION = \"${VER}\"/" Source/Scripts/MRO_MCM.psc
 sed -i "s/Marth Requiem Overhaul v[0-9.]*/Marth Requiem Overhaul v${VER}/" MRO_GenerateESP.py

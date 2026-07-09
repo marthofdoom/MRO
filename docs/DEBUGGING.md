@@ -6,6 +6,16 @@ theorizing. The universal method when nothing matches:
 `tools/dump_record.py`, and diff every subrecord** — type, order, size,
 bytes. The engine rejects records silently; the diff always finds it.
 
+Two rules of numeric diagnosis (both violated in the v0.9.10→12 1H-stall hunt,
+costing two release cycles):
+1. **When a computed number is wrong, log EVERY term of the formula.** The
+   v0.9.11 diagnostic logged dmg, remaining, ref, and the actions *output* —
+   every term except `pace`, the one that was guilty (stale at 50).
+2. **Before shipping a fix, check the hypothesis reproduces the observed number.**
+   The overkill-clamp theory could not explain `actions=0.011` on a NON-kill hit
+   (dmg=181, remaining=756 — no clamping possible); that line was already in the
+   log. actions=0.020 on a typical hit = exactly 1/50 pointed straight at pace.
+
 ## Records / ESP
 
 | Symptom | Cause | Fix |
@@ -42,6 +52,7 @@ bytes. The engine rejects records silently; the diff always finds it.
 | Feature works for player but not followers | Ability/perk granted to player only | Follower loop via `PO3_SKSEFunctions.GetPlayerFollowers()` in the heartbeat |
 | GMST you scale keeps growing each cycle | Reading back your own written value | Capture base before first write, keep in a saved script var |
 | DLL writes a GlobalVariable at kDataLoaded but Papyrus reads the old value in-game | GlobalVariable values are SAVE-PERSISTED: loading a save restores its stored value over anything written earlier (cost us the v0.7.0 NativeDR handshake) | Re-assert DLL-owned globals on `kPostLoadGame` and `kNewGame`, not just kDataLoaded |
+| Tuning global behaves ~N× off its documented default; changing the generator default does nothing | Same save-persistence, other direction: a NEW DEFAULT in the ESP never reaches an EXISTING save — the save's stored value wins forever. If a global's meaning/scale is ever retasked (MRO_T_WeaponXPPerAction went "damage per action"=50 → "pace dial"=1.0 in v0.9.1), every older save keeps the old-scale number silently (taxed weapon XP 50×, the v0.9.10-12 1H stall) | When ANY formula reads a tuning global, print the LIVE value before theorizing (console `help <edid>` or log it). Never retask a global's units — add a new FormID and retire the old one, or have the DLL/script migrate the stored value on version upgrade |
 | MCM checkbox doesn't repaint until the menu is closed and reopened | OnOptionSelect routed a read/write through the quest script; cross-script calls block on the target's instance lock, which the 30s heartbeat holds for its whole run | Keep the repaint path local to the MCM script (read the GlobalVariable directly, SetValue, SetToggleOptionValue), and only then call into the quest |
 | Console `set MRO_G_LAFrac to X` seems ignored / snaps back | Bridge globals are ONE-WAY (mastery level -> fraction -> global -> DLL); the 30s heartbeat republishes the real mastery over any manual write | By design. Test DR with the MCM Features > Testing buttons, which grant real mastery levels |
 | CSF IncrementSkill/IncrementSkillBy do nothing, GetSkillLevel stuck at 0 | Skill JSON has no `"level"` binding — CSF's Skill::Increment silently no-ops without a Level GlobalVariable (`"levelCount"` is not a CSF key; numeric `"ratio"` is ignored; schema wants `"MRO.esp\|0xNNN"` form refs). CSF Increment also hard-caps at level 100 | Bind MRO_ML_* globals (0x850+idx) as `"level"` and MRO_MR_* (0x860+idx) as `"ratio"` in the JSONs; Papyrus writes levels via SetValue directly (bypasses the 100 cap), CSF only reads. When a framework call has no visible effect, READ ITS SOURCE — same doctrine as vanilla-record diffing |
