@@ -77,7 +77,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 5 AutoReadOnly
+Int Property SCRIPT_VERSION = 6 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -96,16 +96,14 @@ Float[] _mxp
 GlobalVariable[] _mLvlG
 GlobalVariable[] _mRatG
 GlobalVariable[] _mXpmG
-Sound _skillUpSound
 
 ; ===============================================================
 ; STARTUP
 ; ===============================================================
 Event OnInit()
-    ApplyGMSTFeatures()
     GiveAbilitiesTo(PlayerRef)
-
     RegisterMasteryEvents()
+    ReconcileAll()   ; GMST features + follower abilities + bridge globals + bonuses
 
     If !MRO_SetupDone || MRO_SetupDone.GetValueInt() == 0
         RegisterForSingleUpdate(20.0)
@@ -120,11 +118,19 @@ Function RegisterMasteryEvents()
     If MRO_EventsAbility && !PlayerRef.HasSpell(MRO_EventsAbility)
         PlayerRef.AddSpell(MRO_EventsAbility, false)
     EndIf
+    ; DLL -> Papyrus events that replace the 30s heartbeat: a per-hit level-up
+    ; (native weapon/armor XP) and a once-per-load reconcile. SKSE persists mod-
+    ; event registrations in its co-save, so registering once carries across
+    ; loads; OnInit also reconciles directly to cover the first game start.
+    RegisterForModEvent("MRO_MasteryLevelUp", "OnNativeMasteryLevelUp")
+    RegisterForModEvent("MRO_GameLoaded", "OnNativeGameLoaded")
     If MasteryEnabled()
         RegisterForActorAction(0)   ; weapon swing: refresh equipped-weapon bonus
         RegisterForActorAction(2)   ; spell fire: magic school XP
         RegisterForMenu("Crafting Menu")
         RegisterForMenu("BarterMenu")
+        RegisterForMenu("InventoryMenu")   ; chest swap: refresh armor bonus
+        RegisterForMenu("ContainerMenu")   ; auto-equip from a container
     EndIf
 EndFunction
 
@@ -137,10 +143,6 @@ Event OnUpdate()
         _installedVersion = SCRIPT_VERSION
     EndIf
 
-    PublishBridgeGlobals()
-    ApplyGMSTFeatures()
-    RefreshFollowerAbilities()
-
     If MRO_SetupDone && MRO_SetupDone.GetValueInt() == 0 && !_introShown
         ; Latch BEFORE showing so no re-entry or stale instance can queue
         ; the intro more than once.
@@ -151,6 +153,36 @@ Event OnUpdate()
         Return
     EndIf
 
+    ; With the DLL present, weapon/armor XP is credited per hit and the level-up
+    ; sound + bonus reconcile are driven by mod events (OnNative* handlers). The
+    ; 30s heartbeat is retired: reconcile once here (covers a pending update that
+    ; fired on load) and do NOT reschedule. Falls through to the legacy tick only
+    ; when the DLL is absent, so no-DLL installs still work.
+    If NativeWeaponXPActive()
+        ReconcileAll()
+        Return
+    EndIf
+
+    ; ---- No-DLL fallback: the legacy 30s heartbeat ----
+    ReconcileAll()
+    If MasteryEnabled() && PlayerRef.IsInCombat()
+        GrantCombatArmorXP()
+    EndIf
+    RegisterForSingleUpdate(30.0)
+EndEvent
+
+; ===============================================================
+; EVENT-DRIVEN RECONCILE (replaces the 30s heartbeat)
+; ===============================================================
+; One-shot reconcile of everything the retired heartbeat did each cycle:
+; publish the bridge globals the DLL reads, re-apply GMST features (they revert
+; on load), refresh follower abilities, and recompute every mastery bonus to the
+; current level + gear. Driven by OnInit (first start) and OnNativeGameLoaded
+; (every load) instead of a timer.
+Function ReconcileAll()
+    PublishBridgeGlobals()
+    ApplyGMSTFeatures()
+    RefreshFollowerAbilities()
     If MasteryEnabled()
         UpdateWeaponMasteryBonus()
         UpdateArmorMasteryBonuses()
@@ -158,23 +190,93 @@ Event OnUpdate()
         UpdateCraftingMasteryBonuses()
         UpdateSpeechMasteryBonus()
         ApplySmithingMastery()
-        If !NativeArmorXPActive() && PlayerRef.IsInCombat()
-            GrantCombatArmorXP()   ; Papyrus fallback only when the native hook isn't measuring
-        EndIf
     EndIf
+EndFunction
 
-    ; Runs regardless of MasteryEnabled: it always drains (zeroes) the
-    ; native damage buckets so they never grow unbounded, and only awards
-    ; XP when mastery is on and the base skill is capped.
-    If NativeWeaponXPActive()
-        DrainNativeWeaponXP()
+; DLL fires this on every kPostLoadGame / kNewGame — our per-load reconcile.
+Event OnNativeGameLoaded(String eventName, String strArg, Float numArg, Form sender)
+    ReconcileAll()
+    ; If the DLL is present but its hook stood down this session (a game update
+    ; failed the site check, or bPhysicalDRHook=0), weapon XP falls back to
+    ; HandleWeaponHit, but armor XP still needs GrantCombatArmorXP on the
+    ; heartbeat -- re-arm the fallback tick that the native branch had retired.
+    If !NativeWeaponXPActive()
+        RegisterForSingleUpdate(30.0)
     EndIf
-    If NativeArmorXPActive()
-        DrainNativeArmorXP()
-    EndIf
-
-    RegisterForSingleUpdate(30.0)
 EndEvent
+
+; DLL fires this when it credits a weapon/armor mastery level (numArg = skill
+; index). The level global is already written native-side; we own the message,
+; the bonus refresh, and re-publishing the armor DR fraction to the DLL.
+Event OnNativeMasteryLevelUp(String eventName, String strArg, Float numArg, Form sender)
+    Int idx = numArg as Int
+    String sid = SkillIdFromIndex(idx)
+    If sid == ""
+        Return
+    EndIf
+    Int newLevel = 0
+    GlobalVariable lg = Game.GetFormFromFile(0x850 + idx, "MRO.esp") as GlobalVariable
+    If lg
+        newLevel = lg.GetValueInt()
+    EndIf
+    CustomSkills.ShowSkillIncreaseMessage(sid, newLevel)
+    AnnounceMasteryLevelUp(sid, newLevel)
+    RefreshBonusForIndex(idx)
+    PublishBridgeGlobals()   ; armor mastery fraction feeds the native DR calc
+EndEvent
+
+; Refresh only the bonus family the given skill index belongs to.
+Function RefreshBonusForIndex(Int idx)
+    If !MasteryEnabled()
+        Return
+    EndIf
+    If idx <= 2
+        UpdateWeaponMasteryBonus()
+    ElseIf idx <= 4
+        UpdateArmorMasteryBonuses()
+    ElseIf idx <= 9
+        UpdateMagicMasteryBonuses()
+    ElseIf idx <= 12
+        UpdateCraftingMasteryBonuses()
+        ApplySmithingMastery()
+    Else
+        UpdateSpeechMasteryBonus()
+    EndIf
+EndFunction
+
+; Inverse of SkillIndex: 0-13 -> mastery id string ("" if out of range).
+String Function SkillIdFromIndex(Int idx)
+    If idx == 0
+        Return ID_OH
+    ElseIf idx == 1
+        Return ID_TH
+    ElseIf idx == 2
+        Return ID_MK
+    ElseIf idx == 3
+        Return ID_LA
+    ElseIf idx == 4
+        Return ID_HA
+    ElseIf idx == 5
+        Return ID_DS
+    ElseIf idx == 6
+        Return ID_RS
+    ElseIf idx == 7
+        Return ID_AL
+    ElseIf idx == 8
+        Return ID_CJ
+    ElseIf idx == 9
+        Return ID_IL
+    ElseIf idx == 10
+        Return ID_SM
+    ElseIf idx == 11
+        Return ID_AC
+    ElseIf idx == 12
+        Return ID_EN
+    ElseIf idx == 13
+        Return ID_SP
+    EndIf
+    Return ""
+EndFunction
 
 ; ===============================================================
 ; UPDATE-IN-PLACE MIGRATION
@@ -573,6 +675,14 @@ Event OnMenuClose(String asMenuName)
         If PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
             GrantMasteryXP(ID_SP, GetMasteryLevel(ID_SP))
         EndIf
+    ElseIf asMenuName == "InventoryMenu" || asMenuName == "ContainerMenu"
+        ; Chest / weapon swaps happen here; re-sync the equipment-dependent
+        ; bonuses now (armor rating by worn chest, damage by equipped weapon)
+        ; so they track gear changes without a heartbeat.
+        If MasteryEnabled()
+            UpdateArmorMasteryBonuses()
+            UpdateWeaponMasteryBonus()
+        EndIf
     EndIf
 EndEvent
 
@@ -629,6 +739,13 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     EndIf
     If !_mxp
         _mxp = new Float[14]
+    EndIf
+    ; The DLL owns the ratio global for weapon/armor skills; seed the local
+    ; accumulator from it so a native->Papyrus handoff resumes from true
+    ; progress, not a stale local (the ratio global is the source of truth).
+    GlobalVariable seedG = MasteryRatioGlobalByIndex(idx)
+    If seedG
+        _mxp[idx] = seedG.GetValue()
     EndIf
     Float baseGrant = 1.0
     If MRO_MasteryBaseGrant
@@ -725,6 +842,12 @@ Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
     EndIf
     If !_mxp
         _mxp = new Float[14]
+    EndIf
+    ; See GrantMasteryXP: seed from the ratio global (DLL-owned for weapon/armor)
+    ; so a native->Papyrus handoff doesn't resume from a stale local value.
+    GlobalVariable seedG = MasteryRatioGlobalByIndex(idx)
+    If seedG
+        _mxp[idx] = seedG.GetValue()
     EndIf
     Int capInt = GetMasteryCap() as Int
     Float baseGrant = 1.0
@@ -1369,12 +1492,10 @@ EndFunction
 ; CSF's ShowSkillIncreaseMessage alone proved too subtle to notice.
 Function AnnounceMasteryLevelUp(String skillId, Int newLevel)
     Debug.Notification(MasteryLabel(skillId) + " Mastery increased to " + newLevel)
-    If !_skillUpSound
-        _skillUpSound = Game.GetFormFromFile(0x00018538, "Skyrim.esm") as Sound
-    EndIf
-    If _skillUpSound
-        _skillUpSound.Play(PlayerRef)
-    EndIf
+    ; Papyrus Sound.Play on a 2D UI sound sits in a dead spot and never fired.
+    ; Route it to the DLL, which plays UISkillIncrease via BSAudioManager
+    ; regardless of menu state. No-op if the DLL isn't installed.
+    SendModEvent("MRO_PlayLevelUpSound")
 EndFunction
 
 ; ===============================================================

@@ -4,6 +4,28 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.6 — 2026-07-08 (alpha)
+
+### Changed
+- **The 30-second mastery heartbeat is retired.** When the SKSE plugin is
+  present it now credits weapon and armor mastery XP **per hit** — applying the
+  full curve and level-ups inside the combat hook — and drives bonus updates
+  through mod events instead of a timer. Papyrus reconciles all mastery bonuses
+  once on each game load and again whenever a skill levels or gear changes
+  (weapon draw, inventory/container close), so nothing polls on a clock. The old
+  heartbeat remains only as a fallback for installs without the plugin.
+
+### Fixed
+- **The mastery level-up sound now plays.** The vanilla `Sound.Play` sat in a 2D
+  UI dead spot and never fired; the plugin now plays `UISkillIncrease` through
+  the audio manager, so every mastery level-up (weapon, armor, magic, craft,
+  speech) has its sound cue.
+
+### Notes
+- Weapon/armor XP pacing is unchanged — the curve was ported to the plugin
+  verbatim; only *where* it runs moved (off the tick, onto the hit).
+- Native load banner now reads **v0.9.6**.
+
 ## v0.9.5 — 2026-07-08 (alpha)
 
 ### Fixed

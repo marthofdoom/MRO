@@ -36,6 +36,23 @@ constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
+// Mastery XP is now applied natively (v0.9.6): the DLL reads the same knobs the
+// MCM writes and owns the curve + level-ups for weapon/armor skills, so the
+// 30s Papyrus drain tick is retired. Config + per-skill state globals:
+constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
+constexpr std::uint32_t kFidMasteryGnt = 0x80D;    // MRO_MasteryBaseGrant (global speed mult)
+constexpr std::uint32_t kFidMasteryCap = 0x80E;    // MRO_MasteryCap (max mastery level)
+constexpr std::uint32_t kFidWeapPace = 0x808;      // MRO_T_WeaponXPPerAction (hits per action)
+constexpr std::uint32_t kFidMLBase = 0x850;        // mastery LEVEL, +idx (0..4 native)
+constexpr std::uint32_t kFidMRBase = 0x860;        // mastery progress RATIO 0-1, +idx
+constexpr std::uint32_t kFidXpmBase = 0x870;       // per-skill XP-speed mult, +idx
+constexpr std::uint32_t kFidSkillIncSound = 0x00018538;  // Skyrim.esm UISkillIncrease (SOUN; SDSC->0x3C7CF)
+
+// Mod-event names (DLL<->Papyrus). Kept in sync with MRO_StartupQuest.psc.
+constexpr const char* kEvtLevelUp = "MRO_MasteryLevelUp";     // DLL->Papyrus: skill idx leveled
+constexpr const char* kEvtGameLoaded = "MRO_GameLoaded";      // DLL->Papyrus: reconcile bonuses
+constexpr const char* kEvtPlaySound = "MRO_PlayLevelUpSound"; // Papyrus->DLL: play UISkillIncrease
+
 bool g_drHookWanted = true;     // default ON; MRO.ini bPhysicalDRHook=0 forces off
 bool g_drHookLive = false;      // site verified + thunk installed
 bool g_absorbHookWanted = true; // default ON; MRO.ini bAbsorbHook=0 forces off
@@ -53,6 +70,14 @@ RE::TESGlobal* g_pendTH = nullptr;
 RE::TESGlobal* g_pendMK = nullptr;
 RE::TESGlobal* g_nativeArmorXP = nullptr;
 RE::TESGlobal* g_pendArmor = nullptr;
+
+RE::TESGlobal* g_masteryEna = nullptr;
+RE::TESGlobal* g_masteryGnt = nullptr;
+RE::TESGlobal* g_masteryCap = nullptr;
+RE::TESGlobal* g_weapPace = nullptr;
+RE::TESGlobal* g_mLvl[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };  // 0=1H 1=2H 2=bow 3=LA 4=HA
+RE::TESGlobal* g_mRat[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
+RE::TESGlobal* g_xpm[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
 
 void SetupLog() {
     auto logDir = SKSE::log::log_directory();
@@ -149,6 +174,154 @@ void DoubleVendorGold() {
     spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
+// ── Mastery XP: native curve + level-ups (v0.9.6) ────────────────────
+// Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
+// CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
+// per-hit hook changes nothing about pacing. Only weapon (0-2) and armor (3-4)
+// run here; magic/craft/speech stay Papyrus-side (already event-driven).
+namespace MasteryXP {
+
+// Fire a mod event to Papyrus (or, for kEvtPlaySound, to our own sink).
+void SendModEvent(const char* a_name, float a_num) {
+    auto* source = SKSE::GetModCallbackEventSource();
+    if (!source) {
+        return;
+    }
+    SKSE::ModCallbackEvent ev{ RE::BSFixedString(a_name), RE::BSFixedString(""), a_num, nullptr };
+    source->SendEvent(&ev);
+}
+
+// Play the vanilla skill-increase sound as a 2D UI sound. The Papyrus
+// Sound.Play sits in a 2D dead spot and never fired; BSAudioManager plays it
+// reliably regardless of menu state. Routed through a mod-event sink so every
+// level-up (native OR Papyrus-side magic/craft/speech) uses the same path.
+void PlayLevelUpSound() {
+    // 0x18538 is a SOUN (TESSound); its SDSC descriptor (0x3C7CF) is what the
+    // audio manager plays. LookupByID form-type-checks, so we must fetch the
+    // SOUN and follow its descriptor rather than casting to BGSSoundDescriptorForm.
+    auto* soun = RE::TESForm::LookupByID<RE::TESSound>(kFidSkillIncSound);
+    if (!soun || !soun->descriptor) {
+        return;
+    }
+    auto* audio = RE::BSAudioManager::GetSingleton();
+    if (!audio) {
+        return;
+    }
+    RE::BSSoundHandle handle;
+    if (audio->BuildSoundDataFromDescriptor(handle, soun->descriptor)) {
+        handle.SetVolume(1.0f);
+        handle.Play();  // no position set == 2D UI sound
+    }
+}
+
+class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
+                                          RE::BSTEventSource<SKSE::ModCallbackEvent>*) override {
+        if (a_event && a_event->eventName == kEvtPlaySound) {
+            PlayLevelUpSound();
+        }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+    static SoundSink* GetSingleton() {
+        static SoundSink instance;
+        return &instance;
+    }
+};
+
+// Per-level cost multiplier — identical to MRO_StartupQuest.CurveMult for the
+// native indices: weapons (0-2) use the steep endgame curve, armor (3-4) L^2.
+float CurveMult(int a_idx, float a_lvl) {
+    if (a_idx <= 2) {
+        return 0.30f * a_lvl * a_lvl * a_lvl + 0.70f * a_lvl * a_lvl * a_lvl * a_lvl;
+    }
+    return a_lvl * a_lvl;
+}
+
+// Actions for the 100->101 step (SkillIndex order), native skills only.
+constexpr float kActionsAtZero[5] = { 187.5f, 112.5f, 93.75f, 45.0f, 45.0f };
+
+// Per-skill XP-speed: read the live global (MCM slider), fall back to the same
+// baked defaults as XPSpeedFor (weapons 2.5, armor 1.0).
+float XpmSpeed(int a_idx) {
+    if (a_idx >= 0 && a_idx < 5 && g_xpm[a_idx] && g_xpm[a_idx]->value > 0.0f) {
+        return g_xpm[a_idx]->value;
+    }
+    return a_idx <= 2 ? 2.5f : 1.0f;
+}
+
+bool BaseSkillCapped(RE::Actor* a_player, int a_idx) {
+    if (!a_player) {
+        return false;
+    }
+    RE::ActorValue av;
+    switch (a_idx) {
+    case 0: av = RE::ActorValue::kOneHanded; break;
+    case 1: av = RE::ActorValue::kTwoHanded; break;
+    case 2: av = RE::ActorValue::kArchery; break;
+    case 3: av = RE::ActorValue::kLightArmor; break;
+    case 4: av = RE::ActorValue::kHeavyArmor; break;
+    default: return false;
+    }
+    return a_player->AsActorValueOwner()->GetBaseActorValue(av) >= 100.0f;
+}
+
+// Bank `a_actions` normalized actions into skill `a_idx`, rolling through as
+// many mastery levels as they fund. Writes the level + ratio globals; on a
+// level-up, fires MRO_MasteryLevelUp so Papyrus shows the CSF message, refreshes
+// that skill's bonus, and re-publishes the armor DR fraction.
+void Credit(int a_idx, float a_actions) {
+    if (a_idx < 0 || a_idx >= 5 || a_actions <= 0.0f) {
+        return;
+    }
+    if (!g_masteryEna || g_masteryEna->value == 0.0f) {
+        return;  // mastery system off: measuring but not awarding
+    }
+    if (!g_mLvl[a_idx] || !g_mRat[a_idx]) {
+        return;  // ESP out of date
+    }
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!BaseSkillCapped(player, a_idx)) {
+        return;  // base skill not capped yet
+    }
+    const int cap = static_cast<int>(g_masteryCap ? g_masteryCap->value : 100.0f);
+    int n = static_cast<int>(g_mLvl[a_idx]->value);
+    if (n >= cap) {
+        return;
+    }
+    const float baseGrant = (g_masteryGnt ? g_masteryGnt->value : 1.0f) * XpmSpeed(a_idx);
+    float ratio = g_mRat[a_idx]->value;
+    if (ratio < 0.0f) {
+        ratio = 0.0f;
+    }
+    float remaining = baseGrant * a_actions;
+    bool leveled = false;
+    while (remaining > 0.0f && n < cap) {
+        const float lvl = (100.0f + static_cast<float>(n)) / 100.0f;
+        const float needed = kActionsAtZero[a_idx] * CurveMult(a_idx, lvl);
+        if (needed <= 0.0f) {
+            break;
+        }
+        const float togo = (1.0f - ratio) * needed;
+        if (remaining < togo) {
+            ratio += remaining / needed;
+            remaining = 0.0f;
+        } else {
+            remaining -= togo;
+            ratio = 0.0f;
+            ++n;
+            leveled = true;
+        }
+    }
+    g_mLvl[a_idx]->value = static_cast<float>(n);
+    g_mRat[a_idx]->value = ratio;
+    if (leveled) {
+        SendModEvent(kEvtLevelUp, static_cast<float>(a_idx));
+    }
+}
+
+}  // namespace MasteryXP
+
 // ── M2: physical DR past the engine cap, per hit ─────────────────────
 namespace PhysicalDR {
 
@@ -224,7 +397,7 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
 static float g_avgHitDmg[3] = {0.0f, 0.0f, 0.0f};
 
 void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
-    if (!g_pendOH || !g_pendTH || !g_pendMK || !a_victim) {
+    if (!a_victim) {
         return;
     }
     const auto* weapon = a_hitData.weapon;
@@ -243,12 +416,11 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
         return;  // no XP for hitting non-hostiles (townsfolk, summons, etc.)
     }
 
-    RE::TESGlobal* bucket = nullptr;
     int idx = -1;
     switch (weapon->weaponData.skill.get()) {
-    case RE::ActorValue::kOneHanded: bucket = g_pendOH; idx = 0; break;
-    case RE::ActorValue::kTwoHanded: bucket = g_pendTH; idx = 1; break;
-    case RE::ActorValue::kArchery:   bucket = g_pendMK; idx = 2; break;
+    case RE::ActorValue::kOneHanded: idx = 0; break;
+    case RE::ActorValue::kTwoHanded: idx = 1; break;
+    case RE::ActorValue::kArchery:   idx = 2; break;
     default: return;  // staves / hand-to-hand: no weapon mastery
     }
 
@@ -273,7 +445,11 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
         credited = remaining;  // overkill earns nothing
     }
     if (credited > 0.0f && ref > 0.0f) {
-        bucket->value += credited / ref;  // dimensionless: ~one hit == one action
+        // (credited/ref) is ~one action per typical hit; the pace dial
+        // (hits per action, higher = slower) then divides it. The DLL now
+        // applies the curve and level-ups directly — no Papyrus drain.
+        const float pace = (g_weapPace && g_weapPace->value > 0.0f) ? g_weapPace->value : 1.0f;
+        MasteryXP::Credit(idx, (credited / ref) / pace);
     }
 }
 
@@ -287,7 +463,7 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
 static float g_avgHitTaken = 0.0f;  // session-scoped, self-seeding (not save-persisted)
 
 void MeasureArmorXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
-    if (!g_pendArmor || !a_victim) {
+    if (!a_victim) {
         return;
     }
     if (!a_hitData.weapon) {
@@ -296,6 +472,21 @@ void MeasureArmorXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     if (!a_victim->IsPlayerRef()) {
         return;  // only the player's own armor trains (followers share the bonus)
     }
+    // The worn chest decides which armor mastery trains: light = Evasion (idx 3),
+    // heavy = Heavy Armor (idx 4); clothing or a bare chest earns nothing. This
+    // reads live gear per hit, replacing the drain-time chest check.
+    const auto* chest = a_victim->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
+    int idx = -1;
+    if (chest) {
+        if (chest->IsLightArmor()) {
+            idx = 3;
+        } else if (chest->IsHeavyArmor()) {
+            idx = 4;
+        }
+    }
+    if (idx < 0) {
+        return;
+    }
     const float dmg = a_hitData.totalDamage;  // post-DR damage actually taken
     if (dmg <= 0.0f) {
         return;
@@ -303,7 +494,7 @@ void MeasureArmorXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     float& avg = g_avgHitTaken;
     const float ref = (avg > 0.0f) ? avg : dmg;
     avg = (avg <= 0.0f) ? dmg : (0.9f * avg + 0.1f * dmg);
-    g_pendArmor->value += dmg / ref;  // ~one hit taken == one action
+    MasteryXP::Credit(idx, dmg / ref);  // ~one hit taken == one action
 }
 
 struct WeaponHitThunk {
@@ -516,6 +707,21 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_pendMK = dh->LookupForm<RE::TESGlobal>(kFidPendMK, "MRO.esp");
             g_nativeArmorXP = dh->LookupForm<RE::TESGlobal>(kFidNativeArmorXP, "MRO.esp");
             g_pendArmor = dh->LookupForm<RE::TESGlobal>(kFidPendArmor, "MRO.esp");
+
+            g_masteryEna = dh->LookupForm<RE::TESGlobal>(kFidMasteryEna, "MRO.esp");
+            g_masteryGnt = dh->LookupForm<RE::TESGlobal>(kFidMasteryGnt, "MRO.esp");
+            g_masteryCap = dh->LookupForm<RE::TESGlobal>(kFidMasteryCap, "MRO.esp");
+            g_weapPace = dh->LookupForm<RE::TESGlobal>(kFidWeapPace, "MRO.esp");
+            for (int i = 0; i < 5; ++i) {
+                g_mLvl[i] = dh->LookupForm<RE::TESGlobal>(kFidMLBase + i, "MRO.esp");
+                g_mRat[i] = dh->LookupForm<RE::TESGlobal>(kFidMRBase + i, "MRO.esp");
+                g_xpm[i] = dh->LookupForm<RE::TESGlobal>(kFidXpmBase + i, "MRO.esp");
+            }
+        }
+        // Sink Papyrus's MRO_PlayLevelUpSound so magic/craft/speech level-ups
+        // (still Papyrus-side) share the native 2D sound path too.
+        if (auto* mc = SKSE::GetModCallbackEventSource()) {
+            mc->AddEventSink(MasteryXP::SoundSink::GetSingleton());
         }
         // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
         // they are live exactly when the DR hook is.
@@ -525,7 +731,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.4 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.6 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -542,6 +748,8 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeAbsorb, g_absorbHookLive, "MRO_G_NativeAbsorb", "post-load");
         AssertHandshake(g_nativeWeaponXP, g_drHookLive, "MRO_G_NativeWeaponXP", "post-load");
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "post-load");
+        // Drive the once-per-load bonus reconcile that replaces the 30s tick.
+        MasteryXP::SendModEvent(kEvtGameLoaded, 0.0f);
         break;
     default:
         break;
@@ -555,7 +763,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.4 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.6 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }
