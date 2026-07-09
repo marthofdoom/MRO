@@ -4,6 +4,19 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.12 — 2026-07-09 (alpha)
+
+### Fixed
+- **1H (and all weapon) mastery XP truly unstalled.** The v0.9.11 clamp removal
+  wasn't enough: the per-hit credit was still divided by `MRO_T_WeaponXPPerAction`,
+  a global that older saves persist at its pre-v0.9.1 value of **50** (its old
+  meaning was "damage per action"), taxing weapon XP 50×. The divisor is gone —
+  weapons now match armor exactly (one typical hit = one action); the XP-speed
+  slider remains the pacing control.
+- **Level-up sound, take three.** `Play()` succeeded but a static position at the
+  player's feet was still inaudible; the emitter now follows the player's 3D node
+  (`SetObjectToFollow`), the standard UI-sound recipe.
+
 ## v0.9.11 — 2026-07-09 (alpha)
 
 ### Fixed
