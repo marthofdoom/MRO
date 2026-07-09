@@ -4,6 +4,25 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.13 — 2026-07-09 (alpha)
+
+### Fixed
+- **MCM mastery progress is live again.** The percent readout read a
+  Papyrus-side value that the native XP path never updates, so weapon/armor
+  progress froze at its last pre-native value (looked like "weapon XP broken"
+  while the real ratio climbed — v0.9.12's engine fix was working all along).
+  It now reads the same ratio globals the DLL writes.
+- **MCM sliders and checkboxes repaint instantly.** The compile stub for
+  SkyUI's `SKI_ConfigBase` declared `SetToggleOptionValue`/`SetSliderOptionValue`
+  without the trailing `a_noUpdate` parameter; the VM silently rejects calls
+  whose argument count doesn't match, so every live repaint failed and values
+  only updated on a page switch. Long-standing.
+
+### Notes
+- DLL unchanged from v0.9.12 (banner reads v0.9.12); this is a scripts-only
+  release. Diagnostic logging stays one more cycle (sound + DR itemization
+  still under test).
+
 ## v0.9.12 — 2026-07-09 (alpha)
 
 ### Fixed
