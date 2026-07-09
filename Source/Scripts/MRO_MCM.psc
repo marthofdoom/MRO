@@ -83,6 +83,16 @@ Function OnGameReload()
     ForcePageReset()
 EndFunction
 
+; THE reliable self-heal hook. OnGameReload only runs once (from the base's
+; OnInit), so on a save that first registered an OLD MRO it never re-runs and
+; the stale Pages array (e.g. the dropped "Boss Readiness" tab) survives. SkyUI
+; calls OnConfigOpen on EVERY menu open, immediately before it pushes Pages to
+; the UI (setPageNames) -- so re-asserting the tab list here can never be stuck,
+; no matter how old the save is.
+Function OnConfigOpen()
+    SetupPages()
+EndFunction
+
 Function SetupPages()
     ModName = "marth Requiem Overhaul"
     Pages = new String[2]

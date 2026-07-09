@@ -54,6 +54,12 @@ EndEvent
 Function OnGameReload()
 EndFunction
 
+; Called by SkyUI every time the config page is opened, right before it pushes
+; the Pages array to the UI (setPageNames). Empty in the real base; declared
+; here so MRO_MCM can override it to re-assert its tab list on every open.
+Function OnConfigOpen()
+EndFunction
+
 Int Function AddHeaderOption(String a_text, Int a_flags = 0) native
 Int Function AddTextOption(String a_text, String a_value, Int a_flags = 0) native
 Int Function AddToggleOption(String a_text, Bool a_checked, Int a_flags = 0) native

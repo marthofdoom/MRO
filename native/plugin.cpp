@@ -36,7 +36,7 @@ constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
-// Mastery XP is now applied natively (v0.9.6): the DLL reads the same knobs the
+// Mastery XP is now applied natively (v0.9.7): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
 // 30s Papyrus drain tick is retired. Config + per-skill state globals:
 constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
@@ -174,7 +174,7 @@ void DoubleVendorGold() {
     spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
-// ── Mastery XP: native curve + level-ups (v0.9.6) ────────────────────
+// ── Mastery XP: native curve + level-ups (v0.9.7) ────────────────────
 // Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
 // CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
 // per-hit hook changes nothing about pacing. Only weapon (0-2) and armor (3-4)
@@ -200,18 +200,28 @@ void PlayLevelUpSound() {
     // audio manager plays. LookupByID form-type-checks, so we must fetch the
     // SOUN and follow its descriptor rather than casting to BGSSoundDescriptorForm.
     auto* soun = RE::TESForm::LookupByID<RE::TESSound>(kFidSkillIncSound);
-    if (!soun || !soun->descriptor) {
+    if (!soun) {
+        spdlog::warn("level-up sound: SOUN {:08X} not found", kFidSkillIncSound);
+        return;
+    }
+    if (!soun->descriptor) {
+        spdlog::warn("level-up sound: SOUN has no descriptor");
         return;
     }
     auto* audio = RE::BSAudioManager::GetSingleton();
     if (!audio) {
+        spdlog::warn("level-up sound: no BSAudioManager");
         return;
     }
     RE::BSSoundHandle handle;
-    if (audio->BuildSoundDataFromDescriptor(handle, soun->descriptor)) {
-        handle.SetVolume(1.0f);
-        handle.Play();  // no position set == 2D UI sound
+    const bool built = audio->BuildSoundDataFromDescriptor(handle, soun->descriptor);
+    if (!built || !handle.IsValid()) {
+        spdlog::warn("level-up sound: build failed (built={}, valid={})", built, handle.IsValid());
+        return;
     }
+    handle.SetVolume(1.0f);
+    const bool played = handle.Play();  // no position set == 2D UI sound
+    spdlog::info("level-up sound: played UISkillIncrease (play={})", played);
 }
 
 class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
@@ -219,6 +229,7 @@ public:
     RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
                                           RE::BSTEventSource<SKSE::ModCallbackEvent>*) override {
         if (a_event && a_event->eventName == kEvtPlaySound) {
+            spdlog::info("SoundSink: {} received", kEvtPlaySound);
             PlayLevelUpSound();
         }
         return RE::BSEventNotifyControl::kContinue;
@@ -722,6 +733,9 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         // (still Papyrus-side) share the native 2D sound path too.
         if (auto* mc = SKSE::GetModCallbackEventSource()) {
             mc->AddEventSink(MasteryXP::SoundSink::GetSingleton());
+            spdlog::info("SoundSink registered for {}", kEvtPlaySound);
+        } else {
+            spdlog::warn("SoundSink: no ModCallbackEventSource — level-up sound disabled");
         }
         // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
         // they are live exactly when the DR hook is.
@@ -731,7 +745,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.6 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.7 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -763,7 +777,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.6 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.7 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

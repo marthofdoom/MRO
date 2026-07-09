@@ -4,6 +4,22 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.7 — 2026-07-08 (alpha)
+
+### Fixed
+- **MCM self-heal, actually fixed.** The v0.9.5 approach hooked `OnGameReload`,
+  which SkyUI only calls once (from `OnInit`) — so on a save that first
+  registered an older MRO it never re-ran and the stale tab list survived. The
+  config now re-asserts its pages in `OnConfigOpen`, which SkyUI calls every time
+  the menu opens (right before it pushes the tab list to the UI), so a dropped
+  page like the long-gone "Boss Readiness" tab can no longer be stuck.
+
+### Diagnostics
+- **Level-up sound**: the scripts correctly send the play event, so the plugin
+  now logs the whole sound path (event received → descriptor resolved → sound
+  built → played) to `MRO.log`, to pin down why `UISkillIncrease` isn't audible
+  yet on some setups.
+
 ## v0.9.6 — 2026-07-08 (alpha)
 
 ### Changed
