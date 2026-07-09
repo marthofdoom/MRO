@@ -4,6 +4,24 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.8 — 2026-07-08 (alpha)
+
+### Performance
+- **Dropped the global weapon-swing listener.** MRO watched `OnActorAction(0)`
+  to refresh the equipped-weapon bonus on quick swaps — but that SKSE event is
+  **global**: it dispatches to our script for *every actor's* weapon swing in the
+  entire load order, and each dispatch costs Papyrus VM time even though we bail
+  on non-player. In a big fight on a large list that is a heavy, load-wide tax.
+  The bonus now refreshes on the **player's own hits** (already player-scoped via
+  the events ability) plus inventory close, so nothing is watched list-wide. The
+  rarer `action 2` (spell fire, for magic XP) is unchanged for now.
+- Also run the version upgrade on game load, not only on the (now-retired) tick,
+  so an update-in-place applies on saves that have already gone tickless.
+
+### Note
+- Scripts-only update; the plugin is byte-identical to v0.9.7 (its load banner
+  still reads v0.9.7). Let `Scripts/` overwrite.
+
 ## v0.9.7 — 2026-07-08 (alpha)
 
 ### Fixed

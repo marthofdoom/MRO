@@ -77,7 +77,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 6 AutoReadOnly
+Int Property SCRIPT_VERSION = 7 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -124,9 +124,13 @@ Function RegisterMasteryEvents()
     ; loads; OnInit also reconciles directly to cover the first game start.
     RegisterForModEvent("MRO_MasteryLevelUp", "OnNativeMasteryLevelUp")
     RegisterForModEvent("MRO_GameLoaded", "OnNativeGameLoaded")
+    ; PERF: action 0 (weapon swing) was a GLOBAL all-actors event and the biggest
+    ; Papyrus tax in big fights. Explicitly unregister it (saves that ran an older
+    ; MRO still hold the registration, so dropping the call is not enough), and
+    ; refresh the weapon bonus off the player's own hits instead (HandleWeaponHit).
+    UnregisterForActorAction(0)
     If MasteryEnabled()
-        RegisterForActorAction(0)   ; weapon swing: refresh equipped-weapon bonus
-        RegisterForActorAction(2)   ; spell fire: magic school XP
+        RegisterForActorAction(2)   ; spell fire: magic school XP (rare vs swings)
         RegisterForMenu("Crafting Menu")
         RegisterForMenu("BarterMenu")
         RegisterForMenu("InventoryMenu")   ; chest swap: refresh armor bonus
@@ -195,6 +199,14 @@ EndFunction
 
 ; DLL fires this on every kPostLoadGame / kNewGame — our per-load reconcile.
 Event OnNativeGameLoaded(String eventName, String strArg, Float numArg, Form sender)
+    ; Run the version upgrade HERE too, not just in OnUpdate: once a save has gone
+    ; tickless (native active), OnUpdate never fires again, so an update-in-place
+    ; would otherwise never run RunUpgrade (which re-registers events, e.g. the
+    ; action-0 unregister). This event fires on every load via the DLL.
+    If _installedVersion != SCRIPT_VERSION
+        RunUpgrade(_installedVersion)
+        _installedVersion = SCRIPT_VERSION
+    EndIf
     ReconcileAll()
     ; If the DLL is present but its hook stood down this session (a game update
     ; failed the site check, or bPhysicalDRHook=0), weapon XP falls back to
@@ -586,17 +598,15 @@ EndFunction
 ; ===============================================================
 ; ACTOR ACTION — Weapon swings, spell fire, bow release
 ; ===============================================================
+; PERF: we no longer register action 0 (weapon swing). OnActorAction is a GLOBAL
+; SKSE event -- it fires for EVERY actor's action in the load order, and each
+; dispatch costs Papyrus VM time even though we bail on non-player. Weapon swings
+; are the highest-frequency action in a fight, so watching them list-wide was a
+; heavy tax; the equipped-weapon bonus now refreshes on the PLAYER's own hits
+; (HandleWeaponHit, player-scoped via the AME) + inventory close. Only action 2
+; (spell fire) remains, and it is far rarer than swings.
 Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
     If akActor != PlayerRef
-        Return
-    EndIf
-    If actionType == 0
-        ; Swings only refresh the equipped-weapon bonus on quick swaps;
-        ; weapon XP comes exclusively from OnWeaponHit (real hits).
-        Weapon w = akSource as Weapon
-        If w && GetWeaponSkill(w) != _activeWeaponSkill
-            UpdateWeaponMasteryBonus()
-        EndIf
         Return
     EndIf
     If actionType == 2
@@ -622,9 +632,14 @@ Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akP
     If !MasteryEnabled()
         Return
     EndIf
-    ; Native path (Model 2): the DLL measures credited damage per hit and
-    ; DrainNativeWeaponXP applies it on the heartbeat. Stand the flat
-    ; per-hit grant down so XP is not double-counted.
+    Weapon w = akSource as Weapon
+    ; Refresh the equipped-weapon bonus on a weapon-skill change. This replaces
+    ; the global OnActorAction(0) swing watch: it is player-scoped (this fires
+    ; only for the player's own hits via the AME), so it costs nothing list-wide.
+    If w && GetWeaponSkill(w) != _activeWeaponSkill
+        UpdateWeaponMasteryBonus()
+    EndIf
+    ; Native path: the DLL credits weapon XP per hit; stand the Papyrus grant down.
     If NativeWeaponXPActive()
         Return
     EndIf
@@ -632,7 +647,6 @@ Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akP
     If !victim || victim.IsDead() || !victim.IsHostileToActor(PlayerRef)
         Return
     EndIf
-    Weapon w = akSource as Weapon
     If !w
         Return
     EndIf
