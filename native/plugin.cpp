@@ -36,7 +36,7 @@ constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
-// Mastery XP is now applied natively (v0.9.10): the DLL reads the same knobs the
+// Mastery XP is now applied natively (v0.9.11): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
 // 30s Papyrus drain tick is retired. Config + per-skill state globals:
 constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
@@ -174,7 +174,7 @@ void DoubleVendorGold() {
     spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
-// ── Mastery XP: native curve + level-ups (v0.9.10) ────────────────────
+// ── Mastery XP: native curve + level-ups (v0.9.11) ────────────────────
 // Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
 // CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
 // per-hit hook changes nothing about pacing. Only weapon (0-2) and armor (3-4)
@@ -253,7 +253,7 @@ public:
     }
 };
 
-// Per-level cost multiplier — matches MRO_StartupQuest.CurveMult. As of v0.9.10
+// Per-level cost multiplier — matches MRO_StartupQuest.CurveMult. As of v0.9.11
 // weapons (0-2) AND armor (3-4) share the steep endgame curve, so armor has the
 // same long grind as weapons (the L^2 branch is only crafting/speech, idx>=10,
 // which the DLL never credits).
@@ -297,7 +297,7 @@ bool BaseSkillCapped(RE::Actor* a_player, int a_idx) {
 // level-up, fires MRO_MasteryLevelUp so Papyrus shows the CSF message, refreshes
 // that skill's bonus, and re-publishes the armor DR fraction.
 void Credit(int a_idx, float a_actions) {
-    // DIAGNOSTIC (v0.9.10): log the first ~20 credit attempts with the exact
+    // DIAGNOSTIC (v0.9.11): log the first ~20 credit attempts with the exact
     // reason, to find why a skill (1H) stalls at a fixed level/ratio. Bounded.
     static int s_log = 0;
     const bool doLog = s_log < 20;
@@ -374,7 +374,7 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
         return;
     }
 
-    // DIAGNOSTIC (v0.9.10): the DR ladder must read WORN + PERK armor, not spell-
+    // DIAGNOSTIC (v0.9.11): the DR ladder must read WORN + PERK armor, not spell-
     // fortified AR (wards, flesh spells). GetActorValue = everything (incl.
     // temporary spell modifiers); GetPermanentActorValue = base + permanent
     // (worn + perks). Log both for the player when the total changes, so a
@@ -479,17 +479,10 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
 
     // Bucket by WEAPON TYPE (from the animation type, always set), NOT
     // weaponData.skill: modded weapons frequently leave the skill field blank, so
-    // the old skill-based switch silently skipped them (1H not leveling on LoreRim,
-    // 2026-07-09). This mirrors the Papyrus GetWeaponSkill (IsSword/IsBow/...).
-    const auto wtype = weapon->GetWeaponType();
-    static int s_wxpLog = 0;
-    if (s_wxpLog < 10) {
-        ++s_wxpLog;
-        spdlog::info("weapon-XP: player hit, weapon type={} dmg={:.1f}",
-                     static_cast<int>(wtype), a_hitData.totalDamage);
-    }
+    // the old skill-based switch silently skipped them. Mirrors the Papyrus
+    // GetWeaponSkill (IsSword/IsBow/...).
     int idx = -1;
-    switch (wtype) {
+    switch (weapon->GetWeaponType()) {
     case RE::WEAPON_TYPE::kOneHandSword:
     case RE::WEAPON_TYPE::kOneHandDagger:
     case RE::WEAPON_TYPE::kOneHandAxe:
@@ -520,17 +513,24 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     const float ref = (avg > 0.0f) ? avg : dmg;
     avg = (avg <= 0.0f) ? dmg : (0.9f * avg + 0.1f * dmg);
 
-    float credited = dmg;
-    if (credited > remaining) {
-        credited = remaining;  // overkill earns nothing
+    if (ref <= 0.0f) {
+        return;
     }
-    if (credited > 0.0f && ref > 0.0f) {
-        // (credited/ref) is ~one action per typical hit; the pace dial
-        // (hits per action, higher = slower) then divides it. The DLL now
-        // applies the curve and level-ups directly — no Papyrus drain.
-        const float pace = (g_weapPace && g_weapPace->value > 0.0f) ? g_weapPace->value : 1.0f;
-        MasteryXP::Credit(idx, (credited / ref) / pace);
+    // Credit the hit's ACTUAL damage / ref -- NO overkill clamp. Capping credited
+    // at the target's remaining HP made a strong character (sliver kill-hits, or
+    // one-shots) earn almost nothing -- weapon XP crawled ~100x too slow (1H
+    // stall, 2026-07-09). The alive+hostile gates already stop dummy/townsfolk
+    // farming. DIAGNOSTIC: log dmg/remaining/ref/actions to confirm ref is a sane
+    // "typical hit" and not skewed high by an outlier (which would keep it slow).
+    const float pace = (g_weapPace && g_weapPace->value > 0.0f) ? g_weapPace->value : 1.0f;
+    const float actions = (dmg / ref) / pace;
+    static int s_wxpLog = 0;
+    if (s_wxpLog < 12) {
+        ++s_wxpLog;
+        spdlog::info("weapon-XP: idx={} dmg={:.1f} remaining={:.1f} ref={:.1f} actions={:.3f}",
+                     idx, dmg, remaining, ref, actions);
     }
+    MasteryXP::Credit(idx, actions);
 }
 
 // Armor-mastery XP: the victim side of the same hook. When the PLAYER is struck
@@ -814,7 +814,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.10 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.11 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -846,7 +846,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.10 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.11 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

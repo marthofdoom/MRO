@@ -4,6 +4,16 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.11 — 2026-07-09 (alpha)
+
+### Fixed
+- **Weapon mastery XP no longer stalls for strong characters.** Credited damage
+  was clamped to the target's *remaining* HP ("overkill earns nothing"), so a
+  character who out-damages enemies (sliver kill-hits, one-shots) earned almost
+  nothing and weapon skills crawled ~100× too slow. Each hit now credits its
+  actual damage, normalized by your typical hit. Diagnostic logging added to
+  confirm the running average isn't skewed by outliers.
+
 ## v0.9.10 — 2026-07-09 (alpha)
 
 ### Fixed
