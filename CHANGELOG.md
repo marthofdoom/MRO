@@ -23,6 +23,11 @@ deleted or overwritten.
   the page list from a save's first registration — an old save could still show
   the removed "Boss Readiness" tab, and `setstage` re-register didn't clear it.
   The MCM now versions itself and refreshes pages on load (self-healing).
+- **Hook handshakes now stand down correctly.** Each native hook's DLL->Papyrus
+  flag is now written 0 when the hook isn't live (not merely left alone), so
+  disabling a hook with `=0`, or downgrading/removing the DLL, reliably hands
+  control back to the Papyrus fallback instead of a stale save value latching it
+  off (covers DR, absorb, weapon-XP and armor-XP).
 
 ### Changed
 - Weapon mastery pace ~20% faster (curve shape unchanged).

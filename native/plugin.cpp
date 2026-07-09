@@ -481,6 +481,22 @@ bool Install() {
 
 }  // namespace Absorb
 
+// Write a DLL->Papyrus handshake global to reflect the hook's ACTUAL state:
+// 1 when the native hook is live (Papyrus fallback stands down), 0 when it is
+// not (Papyrus fallback engages). Always writing — never just skipping — is
+// what lets a user disable a hook (MRO.ini =0), or downgrade/remove the DLL,
+// and have the Papyrus path correctly take back over: GlobalVariable values
+// persist in the save, so a stale 1 would otherwise latch the fallback off.
+void AssertHandshake(RE::TESGlobal* g, bool live, const char* label, const char* phase) {
+    if (!g) {
+        return;
+    }
+    g->value = live ? 1.0f : 0.0f;
+    spdlog::info("{}: {}={} ({})", phase, label, live ? 1 : 0,
+                 live ? "native active, Papyrus fallback stands down"
+                      : "hook not live, Papyrus fallback engaged");
+}
+
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     switch (message->type) {
     case SKSE::MessagingInterface::kDataLoaded: {
@@ -501,26 +517,12 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_nativeArmorXP = dh->LookupForm<RE::TESGlobal>(kFidNativeArmorXP, "MRO.esp");
             g_pendArmor = dh->LookupForm<RE::TESGlobal>(kFidPendArmor, "MRO.esp");
         }
-        if (g_drHookLive && g_nativeDR) {
-            g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
-            spdlog::info("DR hook active: MRO_G_NativeDR=1, Papyrus ladder standing down");
-        }
-        if (g_absorbHookLive && g_nativeAbsorb) {
-            g_nativeAbsorb->value = 1.0f;  // tells the Papyrus OnHit absorb to stand down
-            spdlog::info("Absorb hook active: MRO_G_NativeAbsorb=1, Papyrus absorb standing down");
-        }
-        // Weapon-XP measuring rides the DR weapon-hit thunk (same site), so
-        // it is live exactly when the DR hook is. Tell Papyrus to drain the
-        // native buckets instead of its per-hit grant (Model 2).
-        if (g_drHookLive && g_nativeWeaponXP) {
-            g_nativeWeaponXP->value = 1.0f;
-            spdlog::info("Native weapon-XP measuring active (rides DR hook, normalized): MRO_G_NativeWeaponXP=1");
-        }
-        // Armor-XP rides the same thunk (victim side), live iff the DR hook is.
-        if (g_drHookLive && g_nativeArmorXP) {
-            g_nativeArmorXP->value = 1.0f;
-            spdlog::info("Native armor-XP measuring active (rides DR hook, normalized): MRO_G_NativeArmorXP=1");
-        }
+        // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
+        // they are live exactly when the DR hook is.
+        AssertHandshake(g_nativeDR, g_drHookLive, "MRO_G_NativeDR", "data-loaded");
+        AssertHandshake(g_nativeAbsorb, g_absorbHookLive, "MRO_G_NativeAbsorb", "data-loaded");
+        AssertHandshake(g_nativeWeaponXP, g_drHookLive, "MRO_G_NativeWeaponXP", "data-loaded");
+        AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
             console->Print("MRO native v0.9.4 loaded (DR hook: %s, absorb hook: %s)",
@@ -536,22 +538,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
     // still in control (v0.7.0 field bug, 2026-07-04).
     case SKSE::MessagingInterface::kPostLoadGame:
     case SKSE::MessagingInterface::kNewGame:
-        if (g_drHookLive && g_nativeDR) {
-            g_nativeDR->value = 1.0f;
-            spdlog::info("post-load: MRO_G_NativeDR re-asserted to 1");
-        }
-        if (g_absorbHookLive && g_nativeAbsorb) {
-            g_nativeAbsorb->value = 1.0f;
-            spdlog::info("post-load: MRO_G_NativeAbsorb re-asserted to 1");
-        }
-        if (g_drHookLive && g_nativeWeaponXP) {
-            g_nativeWeaponXP->value = 1.0f;
-            spdlog::info("post-load: MRO_G_NativeWeaponXP re-asserted to 1");
-        }
-        if (g_drHookLive && g_nativeArmorXP) {
-            g_nativeArmorXP->value = 1.0f;
-            spdlog::info("post-load: MRO_G_NativeArmorXP re-asserted to 1");
-        }
+        AssertHandshake(g_nativeDR, g_drHookLive, "MRO_G_NativeDR", "post-load");
+        AssertHandshake(g_nativeAbsorb, g_absorbHookLive, "MRO_G_NativeAbsorb", "post-load");
+        AssertHandshake(g_nativeWeaponXP, g_drHookLive, "MRO_G_NativeWeaponXP", "post-load");
+        AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "post-load");
         break;
     default:
         break;

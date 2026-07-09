@@ -590,11 +590,13 @@ String Function CraftingSkillFromStation()
     If (kForge && furn.HasKeyword(kForge)) || (kWheel && furn.HasKeyword(kWheel)) || (kArmor && furn.HasKeyword(kArmor))
         Return "SM"
     EndIf
-    Keyword kAlch = Keyword.GetKeyword("CraftingAlchemy")
+    ; Alchemy/enchanting furniture use isAlchemy/isEnchanting (verified against
+    ; Skyrim.esm) — there is NO CraftingAlchemy/CraftingEnchanting keyword.
+    Keyword kAlch = Keyword.GetKeyword("isAlchemy")
     If kAlch && furn.HasKeyword(kAlch)
         Return "AC"
     EndIf
-    Keyword kEnch = Keyword.GetKeyword("CraftingEnchanting")
+    Keyword kEnch = Keyword.GetKeyword("isEnchanting")
     If kEnch && furn.HasKeyword(kEnch)
         Return "EN"
     EndIf
@@ -794,7 +796,9 @@ Float Function ActionsAtZero(Int idx)
     ElseIf idx == 2
         Return 93.75    ; Marksman   (~37 shots at 100->101, ~500 at 199->200)
     ElseIf idx <= 4
-        Return 45.0     ; Light/Heavy Armor 30s combat ticks
+        Return 45.0     ; Light/Heavy Armor: normalized hits TAKEN (native hook);
+                        ; ~45 hits survived per first level. Tune via the LA/HA
+                        ; per-skill XP-speed sliders. (Fallback path: 30s ticks.)
     ElseIf idx == 5
         Return 60.0     ; Destruction casts
     ElseIf idx == 6
