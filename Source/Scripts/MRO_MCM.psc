@@ -51,11 +51,30 @@ Int[] _oidSkill
 ; ==========================================================
 
 Event OnConfigInit()
+    SetupPages()
+EndEvent
+
+; SkyUI caches ModName/Pages in the SAVE at first registration and only
+; refreshes them when the config's version increments. Without this, a save
+; that first registered an older MRO shows its old tabs forever (e.g. the
+; "Boss Readiness" page dropped in 0.8.0) even after the scripts update, and
+; `setstage SKI_ConfigManagerInstance 1` will NOT clear it because the version
+; never changed. Bumping GetVersion makes SkyUI fire OnVersionUpdate on the
+; next load and re-run SetupPages. Increment this whenever ModName/Pages change.
+Int Function GetVersion()
+    Return 2
+EndFunction
+
+Event OnVersionUpdate(Int a_version)
+    SetupPages()
+EndEvent
+
+Function SetupPages()
     ModName = "marth Requiem Overhaul"
     Pages = new String[2]
     Pages[0] = "Mastery"
     Pages[1] = "Features"
-EndEvent
+EndFunction
 
 Event OnPageReset(String a_page)
     If a_page == "Mastery"

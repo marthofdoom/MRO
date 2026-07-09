@@ -12,6 +12,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 
 #include <fstream>
+#include <filesystem>
 
 namespace {
 
@@ -32,10 +33,12 @@ constexpr std::uint32_t kFidNativeWeaponXP = 0x81C; // DLL->Papyrus: 1 when weap
 constexpr std::uint32_t kFidPendOH = 0x81D;         // DLL->Papyrus: banked credited 1H damage
 constexpr std::uint32_t kFidPendTH = 0x81E;         // DLL->Papyrus: banked credited 2H damage
 constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked credited Archery damage
+constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
+constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
-bool g_drHookWanted = false;    // from MRO.ini
+bool g_drHookWanted = true;     // default ON; MRO.ini bPhysicalDRHook=0 forces off
 bool g_drHookLive = false;      // site verified + thunk installed
-bool g_absorbHookWanted = false;
+bool g_absorbHookWanted = true; // default ON; MRO.ini bAbsorbHook=0 forces off
 bool g_absorbHookLive = false;
 
 RE::TESGlobal* g_laFrac = nullptr;
@@ -48,6 +51,8 @@ RE::TESGlobal* g_nativeWeaponXP = nullptr;
 RE::TESGlobal* g_pendOH = nullptr;
 RE::TESGlobal* g_pendTH = nullptr;
 RE::TESGlobal* g_pendMK = nullptr;
+RE::TESGlobal* g_nativeArmorXP = nullptr;
+RE::TESGlobal* g_pendArmor = nullptr;
 
 void SetupLog() {
     auto logDir = SKSE::log::log_directory();
@@ -62,17 +67,64 @@ void SetupLog() {
     spdlog::flush_on(spdlog::level::info);
 }
 
-void ReadIni() {
-    std::ifstream ini("Data/SKSE/Plugins/MRO.ini");
-    std::string line;
-    while (std::getline(ini, line)) {
-        if (line.find("bPhysicalDRHook") != std::string::npos &&
-            line.find('=') != std::string::npos) {
-            g_drHookWanted = line.find('1', line.find('=')) != std::string::npos;
+// Parse "key = value" honoring an explicit 0 or 1 (so a user's =0 can turn a
+// default-ON hook OFF). Comments (';') are stripped. Unknown/blank values
+// leave the in-memory default untouched.
+void ParseHookLine(const std::string& line, const char* key, bool& out) {
+    std::string l = line.substr(0, line.find(';'));
+    auto kpos = l.find(key);
+    if (kpos == std::string::npos) {
+        return;
+    }
+    auto eq = l.find('=', kpos);
+    if (eq == std::string::npos) {
+        return;
+    }
+    for (std::size_t i = eq + 1; i < l.size(); ++i) {
+        char c = l[i];
+        if (c == ' ' || c == '\t') {
+            continue;
         }
-        if (line.find("bAbsorbHook") != std::string::npos &&
-            line.find('=') != std::string::npos) {
-            g_absorbHookWanted = line.find('1', line.find('=')) != std::string::npos;
+        if (c == '0') {
+            out = false;
+        } else if (c == '1') {
+            out = true;
+        }
+        return;  // first meaningful char decides
+    }
+}
+
+// Write a default INI (hooks ON) only when none exists, so a manual upgrade
+// never clobbers a user's edited file. The packages ship NO MRO.ini.
+void WriteDefaultIni(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    std::ofstream out(path);
+    if (!out) {
+        spdlog::warn("MRO.ini: could not write default to {}", path.string());
+        return;
+    }
+    out << "; marth Requiem Overhaul - native hook settings.\n"
+        << "; Both default ON. Set a value to 0 to force the Papyrus fallback\n"
+        << "; for that system. Each hook still self-verifies the game binary\n"
+        << "; and stands down safely if it does not match (see MRO.log).\n"
+        << "[Hooks]\n"
+        << "bPhysicalDRHook=1\n"
+        << "bAbsorbHook=1\n";
+    spdlog::info("MRO.ini: not found; wrote defaults (hooks ON) to {}", path.string());
+}
+
+void ReadIni() {
+    const std::filesystem::path path("Data/SKSE/Plugins/MRO.ini");
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        WriteDefaultIni(path);  // in-memory defaults are already ON
+    } else {
+        std::ifstream ini(path);
+        std::string line;
+        while (std::getline(ini, line)) {
+            ParseHookLine(line, "bPhysicalDRHook", g_drHookWanted);
+            ParseHookLine(line, "bAbsorbHook", g_absorbHookWanted);
         }
     }
     spdlog::info("MRO.ini: bPhysicalDRHook={} bAbsorbHook={}",
@@ -225,10 +277,40 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     }
 }
 
+// Armor-mastery XP: the victim side of the same hook. When the PLAYER is struck
+// by a physical weapon, bank the damage actually taken (post-DR) into a bridge
+// global, normalized by an EMA of the player's own damage-taken so one action ==
+// one typical hit survived. Papyrus drains it on the heartbeat and credits Light
+// (Evasion) or Heavy mastery per the worn chest, replacing the old 30s combat
+// tick. Symmetric with weapon XP: one hook, both sides, both damage-based.
+// Runs AFTER Adjust() so totalDamage is the post-DR value the player took.
+static float g_avgHitTaken = 0.0f;  // session-scoped, self-seeding (not save-persisted)
+
+void MeasureArmorXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
+    if (!g_pendArmor || !a_victim) {
+        return;
+    }
+    if (!a_hitData.weapon) {
+        return;  // physical weapon hits only (magic/unarmed do not train armor)
+    }
+    if (!a_victim->IsPlayerRef()) {
+        return;  // only the player's own armor trains (followers share the bonus)
+    }
+    const float dmg = a_hitData.totalDamage;  // post-DR damage actually taken
+    if (dmg <= 0.0f) {
+        return;
+    }
+    float& avg = g_avgHitTaken;
+    const float ref = (avg > 0.0f) ? avg : dmg;
+    avg = (avg <= 0.0f) ? dmg : (0.9f * avg + 0.1f * dmg);
+    g_pendArmor->value += dmg / ref;  // ~one hit taken == one action
+}
+
 struct WeaponHitThunk {
     static void thunk(RE::Actor* a_victim, RE::HitData& a_hitData) {
         Adjust(a_victim, a_hitData);
         MeasureWeaponXP(a_victim, a_hitData);
+        MeasureArmorXP(a_victim, a_hitData);
         func(a_victim, a_hitData);
     }
     static inline REL::Relocation<decltype(thunk)> func;
@@ -416,6 +498,8 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_pendOH = dh->LookupForm<RE::TESGlobal>(kFidPendOH, "MRO.esp");
             g_pendTH = dh->LookupForm<RE::TESGlobal>(kFidPendTH, "MRO.esp");
             g_pendMK = dh->LookupForm<RE::TESGlobal>(kFidPendMK, "MRO.esp");
+            g_nativeArmorXP = dh->LookupForm<RE::TESGlobal>(kFidNativeArmorXP, "MRO.esp");
+            g_pendArmor = dh->LookupForm<RE::TESGlobal>(kFidPendArmor, "MRO.esp");
         }
         if (g_drHookLive && g_nativeDR) {
             g_nativeDR->value = 1.0f;  // tells the Papyrus perk ladder to stand down
@@ -432,9 +516,14 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_nativeWeaponXP->value = 1.0f;
             spdlog::info("Native weapon-XP measuring active (rides DR hook, normalized): MRO_G_NativeWeaponXP=1");
         }
+        // Armor-XP rides the same thunk (victim side), live iff the DR hook is.
+        if (g_drHookLive && g_nativeArmorXP) {
+            g_nativeArmorXP->value = 1.0f;
+            spdlog::info("Native armor-XP measuring active (rides DR hook, normalized): MRO_G_NativeArmorXP=1");
+        }
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.1 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.4 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -459,6 +548,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_nativeWeaponXP->value = 1.0f;
             spdlog::info("post-load: MRO_G_NativeWeaponXP re-asserted to 1");
         }
+        if (g_drHookLive && g_nativeArmorXP) {
+            g_nativeArmorXP->value = 1.0f;
+            spdlog::info("post-load: MRO_G_NativeArmorXP re-asserted to 1");
+        }
         break;
     default:
         break;
@@ -472,7 +565,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.1 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.4 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

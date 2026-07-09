@@ -4,6 +4,34 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.4 — 2026-07-08 (alpha)
+
+### Added
+- **Armor mastery XP is now measured in the combat hook** (victim side),
+  symmetric with weapon XP: when the player is struck by a weapon, the SKSE
+  plugin banks the post-DR damage taken (normalized per hit) and Papyrus credits
+  Evasion or Heavy Armor mastery by the worn chest. The old 30-second combat
+  tick is kept only as a fallback when the hook isn't installed. (Groundwork
+  toward moving XP fully off the Papyrus heartbeat.)
+
+### Fixed
+- **Crafting mastery attribution.** Every station shares one "Crafting Menu", so
+  the old code left Enchanting mastery unreachable and credited Smithing+Alchemy
+  for every station. The workbench keyword is now read on open and only that
+  station's mastery is credited (smelter/cooking/tanning train none).
+- **MCM stuck on old tabs.** The config never versioned itself, so SkyUI froze
+  the page list from a save's first registration — an old save could still show
+  the removed "Boss Readiness" tab, and `setstage` re-register didn't clear it.
+  The MCM now versions itself and refreshes pages on load (self-healing).
+
+### Changed
+- Weapon mastery pace ~20% faster (curve shape unchanged).
+- **Native hooks default ON in code**, and the plugin writes a default `MRO.ini`
+  when none exists. `MRO.ini` is no longer shipped in the package, so a manual
+  upgrade can never overwrite your edited hook settings; an explicit `=0` still
+  forces the Papyrus fallback for that hook.
+- DLL rebuilt — load banner now reads v0.9.4 (synced to the package version).
+
 ## v0.9.3 — 2026-07-08 (alpha)
 
 First tagged pre-release.

@@ -68,6 +68,10 @@ Float _bonusAC      = 0.0
 Float _bonusEN      = 0.0
 String _activeWeaponSkill = ""
 Bool   _introShown = false
+; Which crafting skill the currently-open "Crafting Menu" trains, captured on
+; open from the workbench keyword ("SM"/"AC"/"EN"/""). All stations share one
+; menu name, so we must read the station to credit the right mastery.
+String _craftSkill = ""
 
 ; Bump SCRIPT_VERSION whenever an update needs migration on existing
 ; saves (new arrays, changed registrations, re-applied state). The
@@ -120,7 +124,6 @@ Function RegisterMasteryEvents()
         RegisterForActorAction(0)   ; weapon swing: refresh equipped-weapon bonus
         RegisterForActorAction(2)   ; spell fire: magic school XP
         RegisterForMenu("Crafting Menu")
-        RegisterForMenu("EnchantConstructMenu")
         RegisterForMenu("BarterMenu")
     EndIf
 EndFunction
@@ -155,8 +158,8 @@ Event OnUpdate()
         UpdateCraftingMasteryBonuses()
         UpdateSpeechMasteryBonus()
         ApplySmithingMastery()
-        If PlayerRef.IsInCombat()
-            GrantCombatArmorXP()
+        If !NativeArmorXPActive() && PlayerRef.IsInCombat()
+            GrantCombatArmorXP()   ; Papyrus fallback only when the native hook isn't measuring
         EndIf
     EndIf
 
@@ -165,6 +168,9 @@ Event OnUpdate()
     ; XP when mastery is on and the base skill is capped.
     If NativeWeaponXPActive()
         DrainNativeWeaponXP()
+    EndIf
+    If NativeArmorXPActive()
+        DrainNativeArmorXP()
     EndIf
 
     RegisterForSingleUpdate(30.0)
@@ -333,6 +339,14 @@ EndFunction
 ; grant in HandleWeaponHit stands down in favour of DrainNativeWeaponXP.
 Bool Function NativeWeaponXPActive()
     GlobalVariable g = Game.GetFormFromFile(0x81C, "MRO.esp") as GlobalVariable
+    Return g && g.GetValueInt() == 1
+EndFunction
+
+; Native armor-XP: the DLL banks normalized armor hits-taken (victim side of
+; the same hook) into MRO_X_PendArmor; DrainNativeArmorXP credits Evasion or
+; Heavy per the worn chest, replacing the Papyrus GrantCombatArmorXP tick.
+Bool Function NativeArmorXPActive()
+    GlobalVariable g = Game.GetFormFromFile(0x847, "MRO.esp") as GlobalVariable
     Return g && g.GetValueInt() == 1
 EndFunction
 
@@ -533,24 +547,59 @@ EndFunction
 ; ===============================================================
 ; MENU CLOSE — Crafting mastery XP
 ; ===============================================================
+; Every crafting station (forge, alchemy lab, enchanter, cooking, smelter,
+; tanning, grindstone) opens the SAME "Crafting Menu"; there is no separate
+; "EnchantConstructMenu". So capture WHICH station on open from its workbench
+; keyword, and credit only that station's mastery on close. The old code keyed
+; Enchanting off a menu that never fires (so Enchanting was unreachable) and
+; blindly credited Smithing+Alchemy for every station.
+Event OnMenuOpen(String asMenuName)
+    If asMenuName == "Crafting Menu"
+        _craftSkill = CraftingSkillFromStation()
+    EndIf
+EndEvent
+
 Event OnMenuClose(String asMenuName)
     If asMenuName == "Crafting Menu"
-        If PlayerRef.GetBaseActorValue("Smithing") >= 100.0
+        If _craftSkill == "SM" && PlayerRef.GetBaseActorValue("Smithing") >= 100.0
             GrantMasteryXP(ID_SM, GetMasteryLevel(ID_SM))
-        EndIf
-        If PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
+        ElseIf _craftSkill == "AC" && PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
             GrantMasteryXP(ID_AC, GetMasteryLevel(ID_AC))
-        EndIf
-    ElseIf asMenuName == "EnchantConstructMenu"
-        If PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
+        ElseIf _craftSkill == "EN" && PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
             GrantMasteryXP(ID_EN, GetMasteryLevel(ID_EN))
         EndIf
+        _craftSkill = ""
     ElseIf asMenuName == "BarterMenu"
         If PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
             GrantMasteryXP(ID_SP, GetMasteryLevel(ID_SP))
         EndIf
     EndIf
 EndEvent
+
+; Maps the workbench the player is using to a crafting mastery id. Smelter,
+; cooking pot and tanning rack have no mastery -> "". Keyword lookups are by
+; editor id (SKSE Keyword.GetKeyword), so no hardcoded FormIDs.
+String Function CraftingSkillFromStation()
+    ObjectReference furn = PlayerRef.GetFurnitureReference()
+    If !furn
+        Return ""
+    EndIf
+    Keyword kForge  = Keyword.GetKeyword("CraftingSmithingForge")
+    Keyword kWheel  = Keyword.GetKeyword("CraftingSmithingSharpeningWheel")
+    Keyword kArmor  = Keyword.GetKeyword("CraftingSmithingArmorTable")
+    If (kForge && furn.HasKeyword(kForge)) || (kWheel && furn.HasKeyword(kWheel)) || (kArmor && furn.HasKeyword(kArmor))
+        Return "SM"
+    EndIf
+    Keyword kAlch = Keyword.GetKeyword("CraftingAlchemy")
+    If kAlch && furn.HasKeyword(kAlch)
+        Return "AC"
+    EndIf
+    Keyword kEnch = Keyword.GetKeyword("CraftingEnchanting")
+    If kEnch && furn.HasKeyword(kEnch)
+        Return "EN"
+    EndIf
+    Return ""
+EndFunction
 
 ; ===============================================================
 ; MASTERY XP GRANT
@@ -622,6 +671,27 @@ Function DrainNativeWeaponXP()
     DrainOneWeapon(ID_OH, "OneHanded", 0x81D, perAction)
     DrainOneWeapon(ID_TH, "TwoHanded", 0x81E, perAction)
     DrainOneWeapon(ID_MK, "Marksman",  0x81F, perAction)
+EndFunction
+
+; Drain the native armor bucket (normalized hits-taken) and credit Evasion
+; (light chest) or Heavy Armor (heavy chest); no chest -> discard. Gated on the
+; matching base skill being capped, like the other masteries.
+Function DrainNativeArmorXP()
+    GlobalVariable pend = Game.GetFormFromFile(0x848, "MRO.esp") as GlobalVariable
+    If !pend
+        Return
+    EndIf
+    Float acts = pend.GetValue()
+    pend.SetValue(0.0)                ; always consume so the bucket never grows unbounded
+    If acts <= 0.0 || !MasteryEnabled()
+        Return
+    EndIf
+    Int wc = WornChestWeightClass()  ; 0 = light, 1 = heavy, -1 = none
+    If wc == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
+        GrantMasteryXPAmount(ID_LA, GetMasteryLevel(ID_LA), acts)
+    ElseIf wc == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
+        GrantMasteryXPAmount(ID_HA, GetMasteryLevel(ID_HA), acts)
+    EndIf
 EndFunction
 
 Function DrainOneWeapon(String skillId, String baseAV, Int pendFormId, Float perAction)
@@ -705,9 +775,10 @@ EndFunction
 ; hit. All three weapon skills share the SAME steep curve L (0.30*L^3+0.70*L^4
 ; in GrantMasteryXPAmount) but keep per-weapon BASES for fight-parity: 1H lands
 ; more swings per fight than a bow, so 1H's base is higher. With the 2.5x speed
-; default, ActionsAtZero/2.5 = first-level hits: 1H=90, 2H=54, bow=45; the same
-; curve carries the cap (199->200) to 1H=1200, 2H=720, bow=600. Tune globally
-; via MRO_T_WeaponXPPerAction.
+; default, ActionsAtZero/2.5 = first-level hits: 1H=75, 2H=45, bow=37.5; the same
+; curve carries the cap (199->200) to 1H=1000, 2H=600, bow=500. (Bases were cut
+; ~20% from the v0.9.2 tuning -> ~20% faster, curve shape unchanged.) Tune
+; globally via MRO_T_WeaponXPPerAction.
 ; Magic (5-9) shares the weapons' steep curve (see CurveMult) but keeps its own
 ; action unit: 1 action = MRO_T_MagicXPPerCost (150) magicka spent. Armor/
 ; crafting/speech below stay on L^2. Action units per skill:
@@ -717,11 +788,11 @@ EndFunction
 ;   Alch  ~110/potion, ~5/session         Ench  900/item, ~2/session
 Float Function ActionsAtZero(Int idx)
     If idx == 0
-        Return 225.0    ; OneHanded  (~90 hits at 100->101, ~1200 at 199->200)
+        Return 187.5    ; OneHanded  (~75 hits at 100->101, ~1000 at 199->200)
     ElseIf idx == 1
-        Return 135.0    ; TwoHanded  (~54 hits at 100->101, ~720 at 199->200)
+        Return 112.5    ; TwoHanded  (~45 hits at 100->101, ~600 at 199->200)
     ElseIf idx == 2
-        Return 112.5    ; Marksman   (~45 shots at 100->101, ~600 at 199->200)
+        Return 93.75    ; Marksman   (~37 shots at 100->101, ~500 at 199->200)
     ElseIf idx <= 4
         Return 45.0     ; Light/Heavy Armor 30s combat ticks
     ElseIf idx == 5
