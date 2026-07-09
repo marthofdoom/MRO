@@ -903,7 +903,9 @@ EndFunction
 ; value). Armor (3-4), crafting (10-12) and Speech (13) stay on the gentler
 ; L^2. L = (100 + masteryLevel) / 100.
 Float Function CurveMult(Int idx, Float lvl)
-    If idx <= 2 || (idx >= 5 && idx <= 9)
+    ; Weapons (0-2), armor (3-4) and magic (5-9) share the steep endgame curve
+    ; (armor joined in v0.9.9). Only crafting (10-12) and Speech (13) stay on L^2.
+    If idx <= 9
         Return 0.30 * lvl * lvl * lvl + 0.70 * lvl * lvl * lvl * lvl
     EndIf
     Return lvl * lvl

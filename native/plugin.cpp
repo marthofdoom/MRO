@@ -36,7 +36,7 @@ constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
 
-// Mastery XP is now applied natively (v0.9.7): the DLL reads the same knobs the
+// Mastery XP is now applied natively (v0.9.9): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
 // 30s Papyrus drain tick is retired. Config + per-skill state globals:
 constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
@@ -174,7 +174,7 @@ void DoubleVendorGold() {
     spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
-// ── Mastery XP: native curve + level-ups (v0.9.7) ────────────────────
+// ── Mastery XP: native curve + level-ups (v0.9.9) ────────────────────
 // Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
 // CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
 // per-hit hook changes nothing about pacing. Only weapon (0-2) and armor (3-4)
@@ -220,7 +220,14 @@ void PlayLevelUpSound() {
         return;
     }
     handle.SetVolume(1.0f);
-    const bool played = handle.Play();  // no position set == 2D UI sound
+    // The descriptor builds as a positional (3D) sound anchored at the world
+    // origin, so Play() succeeds but it's inaudible from anywhere else (play=true
+    // logged, nothing heard — 2026-07-09). Anchor it at the player so the listener
+    // hears it, i.e. effectively 2D.
+    if (auto* pc = RE::PlayerCharacter::GetSingleton()) {
+        handle.SetPosition(pc->GetPosition());
+    }
+    const bool played = handle.Play();
     spdlog::info("level-up sound: played UISkillIncrease (play={})", played);
 }
 
@@ -246,10 +253,12 @@ public:
     }
 };
 
-// Per-level cost multiplier — identical to MRO_StartupQuest.CurveMult for the
-// native indices: weapons (0-2) use the steep endgame curve, armor (3-4) L^2.
+// Per-level cost multiplier — matches MRO_StartupQuest.CurveMult. As of v0.9.9
+// weapons (0-2) AND armor (3-4) share the steep endgame curve, so armor has the
+// same long grind as weapons (the L^2 branch is only crafting/speech, idx>=10,
+// which the DLL never credits).
 float CurveMult(int a_idx, float a_lvl) {
-    if (a_idx <= 2) {
+    if (a_idx <= 4) {
         return 0.30f * a_lvl * a_lvl * a_lvl + 0.70f * a_lvl * a_lvl * a_lvl * a_lvl;
     }
     return a_lvl * a_lvl;
@@ -349,6 +358,27 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     const bool isPlayer = a_victim->IsPlayerRef();
     if (!isPlayer && !a_victim->IsPlayerTeammate()) {
         return;
+    }
+
+    // DIAGNOSTIC (v0.9.9): the DR ladder must read WORN + PERK armor, not spell-
+    // fortified AR (wards, flesh spells). GetActorValue = everything (incl.
+    // temporary spell modifiers); GetPermanentActorValue = base + permanent
+    // (worn + perks). Log both for the player when the total changes, so a
+    // ward-on/ward-off test reveals which bucket the spell AR lands in. If the
+    // gap tracks the ward, the fix is GetActorValue -> GetPermanentActorValue.
+    if (isPlayer) {
+        static float s_lastFull = -1.0f;
+        auto* avoDbg = a_victim->AsActorValueOwner();
+        const float arFull = avoDbg->GetActorValue(RE::ActorValue::kDamageResist);
+        float delta = arFull - s_lastFull;
+        if (delta < 0.0f) {
+            delta = -delta;
+        }
+        if (delta > 0.5f) {
+            const float arPerm = avoDbg->GetPermanentActorValue(RE::ActorValue::kDamageResist);
+            spdlog::info("DR-AR: full={:.1f} permanent={:.1f} (full-perm = spell-added AR)", arFull, arPerm);
+            s_lastFull = arFull;
+        }
     }
 
     const auto* chest = a_victim->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
@@ -751,7 +781,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.7 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.9 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -783,7 +813,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.7 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.9 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

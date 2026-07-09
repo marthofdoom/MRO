@@ -4,6 +4,28 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## v0.9.9 — 2026-07-09 (alpha)
+
+### Fixed
+- **Mastery level-up sound is now audible.** The native play succeeded but the
+  sound was built as a positional (3D) source anchored at the world origin, so it
+  played into the void. It's now anchored at the player, so every mastery level-up
+  (weapon, armor, magic, craft, speech) actually rings.
+
+### Changed
+- **Armor mastery XP now uses the steep weapon curve** (was L²), so armor has the
+  same long endgame grind as weapons in every configuration.
+
+### Performance
+- Mod-event sink now compares its event name via an interned pointer instead of a
+  per-event string compare — negligible either way, but cleaner for a broadcast
+  sink in a large load order.
+
+### Diagnostics
+- Logs the player's armor rating as `full` vs `permanent` when it changes, to pin
+  down where spell-fortified AR (wards, flesh spells) sits — groundwork for making
+  the DR ladder read worn+perk armor only.
+
 ## v0.9.8 — 2026-07-08 (alpha)
 
 ### Performance
