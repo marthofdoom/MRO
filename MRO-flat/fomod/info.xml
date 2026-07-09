@@ -2,7 +2,7 @@
 <fomod>
   <Name>marth Requiem Overhaul</Name>
   <Author>marth</Author>
-  <Version>0.9.9</Version>
+  <Version>0.9.10</Version>
   <Description>A load-order mod that rebalances Requiem's late-game power scaling.
 Early and mid game are untouched; every feature gates on endgame investment,
 so you keep ascending while enemies keep their Requiem lethality.
