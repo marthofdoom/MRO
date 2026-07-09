@@ -220,12 +220,15 @@ void PlayLevelUpSound() {
         return;
     }
     handle.SetVolume(1.0f);
-    // The descriptor builds as a positional (3D) sound anchored at the world
-    // origin, so Play() succeeds but it's inaudible from anywhere else (play=true
-    // logged, nothing heard — 2026-07-09). Anchor it at the player so the listener
-    // hears it, i.e. effectively 2D.
+    // A static SetPosition at the player's feet still logged play=true but was
+    // inaudible (2026-07-09). Tie the emitter to the player's 3D node instead, so
+    // the sound is spatialized relative to the listener and tracks the camera —
+    // the community-proven UI-sound recipe. Falls through as a 2D sound if the
+    // node is unavailable (e.g. mid-load).
     if (auto* pc = RE::PlayerCharacter::GetSingleton()) {
-        handle.SetPosition(pc->GetPosition());
+        if (auto* node = pc->Get3D()) {
+            handle.SetObjectToFollow(node);
+        }
     }
     const bool played = handle.Play();
     spdlog::info("level-up sound: played UISkillIncrease (play={})", played);
@@ -522,8 +525,12 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     // stall, 2026-07-09). The alive+hostile gates already stop dummy/townsfolk
     // farming. DIAGNOSTIC: log dmg/remaining/ref/actions to confirm ref is a sane
     // "typical hit" and not skewed high by an outlier (which would keep it slow).
-    const float pace = (g_weapPace && g_weapPace->value > 0.0f) ? g_weapPace->value : 1.0f;
-    const float actions = (dmg / ref) / pace;
+    // Symmetric with MeasureArmorXP: one typical hit == one action (dmg/ref). The
+    // old /pace divisor read a stale, save-persisted MRO_T_WeaponXPPerAction that
+    // a legacy build had left at ~50, taxing weapon XP ~50x and stalling 1H
+    // (2026-07-09). Per-skill pace is already the XP-speed slider (g_xpm), so the
+    // separate dial was redundant; dropped. g_weapPace lookup left for scope audit.
+    const float actions = dmg / ref;
     static int s_wxpLog = 0;
     if (s_wxpLog < 12) {
         ++s_wxpLog;
@@ -814,7 +821,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.11 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.9.12 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -846,7 +853,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.11 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.9.12 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }
