@@ -96,6 +96,40 @@ costing two release cycles):
   relative path (`Data/SKSE/Plugins/MRO.log`, like ReadIni) — MO2's USVFS
   redirects it to the Overwrite folder on the real filesystem.
 
+## Papyrus engine log (Papyrus.0.log) on this setup
+
+MRO.log only shows what OUR code prints. VM-level failures — arity-mismatch
+call rejections (the Set*OptionValue repaint bug), event-registration errors,
+stack dumps, whether an inherited event like OnConfigOpen fires at all — go
+ONLY to the engine's Papyrus.0.log, which LoreRim ships disabled.
+
+Enabling it is a maze (2026-07-09: two sessions produced NO log because the
+edit landed in a dead ini). There are THREE Skyrim.ini's; set
+`[Papyrus] bEnableLogging=1 bEnableTrace=1 bLoadDebugInformation=1` in ALL:
+
+1. `profiles/Default/skyrim.ini` (LOWERCASE). The profile contains case-split
+   duplicates (`skyrim.ini` + `Skyrim.ini`, ditto prefs/custom) on the
+   case-sensitive fs; wine/MO2 resolves to lowercase — the game updates
+   lowercase `skyrimprefs.ini`, never the capitalized one. An edit to
+   `Skyrim.ini` (capital) is silently ignored.
+2. `profiles/Default/Skyrim.ini` (capital) — keep it in sync anyway; which
+   variant usvfs serves is resolution-order dependent.
+3. The PREFIX-side file `<prefix>/drive_c/users/steamuser/Documents/My Games/
+   Skyrim Special Edition/Skyrim.INI` — a FILE, distinct from the
+   `My Games/Skyrim.INI/` *directory* that receives some SKSE logs. That
+   My Games dir has the ext4 casefold attr (`lsattr` shows `F`), so any case
+   spelling reaches it. MO2 has `profile_local_inis=true`, yet a session with
+   ONLY the profile ini enabled wrote no log while the engine access-touched
+   this file — the redirect does not reliably cover it under Proton.
+
+The log lands in `Logs/Script/Papyrus.0.log` under `My Games/Skyrim Special
+Edition/` or `My Games/Skyrim.INI/` — don't guess, `find <prefix> -iname
+Papyrus.0.log -mmin -60`. No SkyrimCustom.ini currently overrides [Papyrus]
+(verified 2026-07-09) — recheck if a log again fails to appear.
+
+**REVERT all three to 0 after diagnosis** — trace logging costs perf, which
+is why the list disables it.
+
 ## Crash analysis
 Crash logs: `.../compatdata/3375297225/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/SKSE/crash-*.log`.
 Check POSSIBLE RELEVANT OBJECTS + CALL STACK for our forms/scripts. MRO is
