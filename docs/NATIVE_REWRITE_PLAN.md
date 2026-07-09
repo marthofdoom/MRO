@@ -93,6 +93,55 @@ one-handed, restoration, evasion mastery XP all accruing.
   the running process for AE hook sites).
 - **M4 cleanup**: Papyrus keeps MCM/mastery; MCM toggles write an INI or
   globals the DLL reads.
+- **M5 native mastery XP + retire the 30s tick** — SHIPPED v0.9.6/0.9.7.
+  The weapon-hit thunk now applies the mastery curve and level-ups PER HIT
+  in the DLL (`MasteryXP::Credit`), writing the level (0x850+idx) and ratio
+  (0x860+idx) globals directly — the Papyrus drain heartbeat is gone. On a
+  level-up the DLL fires the `MRO_MasteryLevelUp` mod event; on load it fires
+  `MRO_GameLoaded`. Papyrus went event-driven: `OnUpdate` no longer reschedules
+  when the DLL is live (30s loop kept only as no-DLL fallback), bonuses reconcile
+  on load + level-up + inventory/gear events. Native level-up SOUND added (see
+  findings). The curve is a verbatim port of `GrantMasteryXPAmount` — Fable
+  confirmed exact pacing parity. Magic/craft/speech XP stay Papyrus (already
+  per-cast/per-menu, never ticked).
+
+## Engine / CommonLib findings (verified in build, v0.9.6-0.9.7)
+
+- **WHICH FORK.** `native/vcpkg-configuration.json` pulls `commonlibsse-ng`
+  from the **colorglass/vcpkg-colorglass** registry = **CharmedBaryon/
+  CommonLibSSE-NG** (branch `master`), NOT alandtse/CommonLibVR. The two forks'
+  RE headers DIVERGE — verify any API against
+  `raw.githubusercontent.com/CharmedBaryon/CommonLibSSE-NG/master/include/RE/...`.
+  Cost a wrong guess once: CommonLibVR/ng has `BSAudioManager::GetSoundHandle`,
+  CharmedBaryon does not (it has `BuildSoundDataFromDescriptor`). No local
+  headers exist on this machine (CI/vcpkg fetches them), so WebFetch the fork's
+  raw headers to confirm signatures before a CI round-trip.
+- **Play a UI sound natively (fixes Papyrus `Sound.Play` 2D dead-spot).**
+  `0x00018538` "UISkillIncrease" is a **SOUN (`RE::TESSound`)**, not a SNDR —
+  `LookupByID<BGSSoundDescriptorForm>` returns nullptr (it form-type-checks).
+  Use `LookupByID<RE::TESSound>(0x18538)->descriptor` (its SDSC, `0x0003C7CF`),
+  then `RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(handle,
+  descriptor)` (returns bool) → `handle.SetVolume(1); handle.Play()` (no position
+  = 2D). BGSSoundDescriptorForm publicly derives BSISoundDescriptor (implicit
+  upcast). (Papyrus `Sound` == SOUN, which is why the old `as Sound` cast worked.)
+- **DLL ↔ Papyrus mod events.** Send from DLL:
+  `SKSE::GetModCallbackEventSource()` → `RE::BSTEventSource<SKSE::ModCallbackEvent>*`,
+  `->SendEvent(&ev)`; `ModCallbackEvent` is aggregate `{BSFixedString eventName,
+  BSFixedString strArg, float numArg, TESForm* sender}`. Receive in DLL: subclass
+  `RE::BSTEventSink<SKSE::ModCallbackEvent>`, override `ProcessEvent(const
+  SKSE::ModCallbackEvent*, BSTEventSource<…>*)`, `AddEventSink(sink)` at
+  kDataLoaded. Papyrus `Form.SendModEvent`/`RegisterForModEvent` route to native
+  sinks and vice-versa — this is how we play the sound from a Papyrus level-up.
+- **SKSE persists `RegisterForModEvent` in the co-save**, so a quest registering
+  once in OnInit/RunUpgrade carries across loads — BUT adding a NEW mod event in
+  a script update means existing saves never register it unless you **bump
+  SCRIPT_VERSION** (RunUpgrade re-registers; the pending 30s tick delivers it).
+  Fable-caught: shipping without the bump = dead event plumbing on every old save.
+- **SkyUI MCM lifecycle (see also DEBUGGING.md).** `OnConfigInit` and
+  `OnGameReload` each run ONCE (OnGameReload's only caller is OnInit). The sole
+  per-menu-open hook is **`OnConfigOpen`** (SKI_ConfigBase.psc:921, right before
+  it pushes `Pages` via setPageNames:923) — the only reliable place to re-assert
+  a config's tab list on an existing save.
 
 ## Safety rules (non-negotiable)
 
