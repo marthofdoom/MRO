@@ -175,7 +175,34 @@ through existing globals, that's a mechanism gap to close first, not a profile.
 
 ---
 
-## 5. Decisions to make (after the v0.9.6 playtest)
+## 5a. Decided (2026-07-08)
+
+- **Release shape:** ship **1.0 of the Requiem module** now (clear label); build
+  the framework toward a later 1.0.
+- **Mastery on non-static-leveling lists:** additive + **soften the bonuses** →
+  a true Vanilla profile is in scope.
+- **Profiles:** **Vanilla**, **Any / generic**, and an **Experience.ini-driven**
+  profile. Only **Requiem** gets bespoke treatment; everything else is one of
+  those three.
+- **DR-past-cap off-Requiem:** keep armor masteries as **flat bonuses, drop the
+  past-cap ladder** — BUT first settle *how armor behaves on non-Requiem lists*
+  (see below; the flat +armor bonus may be a no-op at a reachable vanilla cap).
+- **Detection depth:** distinguish Requiem vs Experience.ini vs Vanilla/generic
+  (medium — plugin presence + the Experience.ini check).
+- **Name:** keep the **MRO** initials/plugin (`MRO.esp` for save-compat); change
+  only what the letters stand for (drop "Requiem" from the expansion).
+
+### OPEN — armor behavior on non-Requiem lists (to resolve before the Vanilla profile)
+Vanilla armor converts rating → DR at `fArmorScalingFactor` (~0.12%/point) up to
+`fMaxArmorRating` (~80% DR), and a full smithed set reaches that cap easily — the
+opposite of Requiem, where armor is scarce and the cap is a long grind (which is
+what the 75→99% mastery ladder rewards). Consequence: on a vanilla list a flat
+**+armor-rating** mastery bonus is often a **no-op at endgame** (already capped).
+So the non-Requiem armor mastery likely needs a *different* reward than "+armor":
+e.g. a small flat DR inside the cap, a modest cap raise, or a defensive capstone
+(stagger/stamina). Decide this when we build the Vanilla profile.
+
+## 5b. Decisions to make (after the v0.9.6 playtest)
 
 Ranked by how much they shape the framework. Each is a genuine call for you:
 
