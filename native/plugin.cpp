@@ -228,7 +228,13 @@ class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
 public:
     RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
                                           RE::BSTEventSource<SKSE::ModCallbackEvent>*) override {
-        if (a_event && a_event->eventName == kEvtPlaySound) {
+        // This sink is notified for EVERY mod event in the load order (thousands
+        // in a big list). Interning our name once makes the per-event check a
+        // BSFixedString==BSFixedString pointer compare (_data==_data) instead of
+        // a case-insensitive strncmp — near-zero, so a busy event stream costs us
+        // nothing. We only do real work on our own event.
+        static const RE::BSFixedString kPlaySound{ kEvtPlaySound };
+        if (a_event && a_event->eventName == kPlaySound) {
             spdlog::info("SoundSink: {} received", kEvtPlaySound);
             PlayLevelUpSound();
         }
