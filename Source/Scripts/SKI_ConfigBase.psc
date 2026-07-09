@@ -67,8 +67,16 @@ Int Function AddSliderOption(String a_text, Float a_value, String a_format = "{0
 Int Function AddEmptyOption() native
 Function SetCursorFillMode(Int a_fillMode) native
 Function SetCursorPosition(Int a_position) native
-Function SetToggleOptionValue(Int a_option, Bool a_value) native
-Function SetSliderOptionValue(Int a_option, Float a_value, String a_format = "{0}") native
+; SIGNATURES MUST MATCH REAL SKYUI EXACTLY — the compiler bakes the stub's arg
+; count (defaults filled in) into every call site, and the VM REJECTS calls
+; whose arity differs from the runtime function. These two were declared
+; without the trailing a_noUpdate for months: pages rendered (the Add* stubs
+; matched), but every repaint call silently failed, so sliders/checkboxes
+; only updated on a page switch (re-render from globals). Silent because
+; Papyrus logging is off. Real signatures verified against SkyUI source
+; (SKI_ConfigBase.psc:869/:1184).
+Function SetToggleOptionValue(Int a_option, Bool a_checked, Bool a_noUpdate = false) native
+Function SetSliderOptionValue(Int a_option, Float a_value, String a_formatString = "{0}", Bool a_noUpdate = false) native
 Function SetSliderDialogStartValue(Float a_value) native
 Function SetSliderDialogDefaultValue(Float a_value) native
 Function SetSliderDialogRange(Float a_min, Float a_max) native
