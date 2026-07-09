@@ -83,3 +83,4 @@ Function SetSliderDialogRange(Float a_min, Float a_max) native
 Function SetSliderDialogInterval(Float a_interval) native
 Function ForcePageReset() native
 Function SetInfoText(String a_text) native
+Function SetTitleText(String a_text) native

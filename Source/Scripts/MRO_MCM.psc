@@ -91,6 +91,10 @@ EndFunction
 ; no matter how old the save is.
 Function OnConfigOpen()
     SetupPages()
+    ; Version in the menu header, re-stamped every open: the one at-a-glance
+    ; proof of which script build is live (user couldn't tell v0.9.13 landed
+    ; because nothing visible changed, 2026-07-09).
+    SetTitleText("marth Requiem Overhaul  v" + MRO_VERSION)
     ; No heartbeat republishes the mastery fraction the native DR calc reads, so
     ; do it on MCM open: otherwise an out-of-band mastery change (console set, or
     ; the cap slider) won't reach the DR ladder until the next load or level-up.
