@@ -125,9 +125,11 @@ plan with per-hook open-source references.
 
 ## Requirements
 
-Requiem, SKSE64, SkyUI 5.2+, Custom Skills Framework, powerofthree's Papyrus
-Extender, and PapyrusUtil. Developed and tested against LoreRim on Skyrim SE
-1.6.1170.
+SKSE64, Address Library for SKSE Plugins, SkyUI 5.2+, Custom Skills
+Framework, and powerofthree's Papyrus Extender. Currently balanced for and
+tested against **Requiem**-based lists (LoreRim, Skyrim SE 1.6.1170); other
+setups are the roadmap's broadening work. The bundled `MRO.dll` is part of
+the mod itself and required.
 
 MRO contains only original work — a Python-generated plugin and an SKSE DLL.
 It redistributes no assets from Requiem or any other mod; those remain

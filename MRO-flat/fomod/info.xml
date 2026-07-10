@@ -27,8 +27,9 @@ Core features:
 - Optional Experience.ini: same total leveling speed as Faster Leveling,
   weighted toward kills and quests over pure exploration
 
-Requires: SKSE64, SkyUI 5.2+ (MCM), Custom Skills Framework (Mastery),
-powerofthree's Papyrus Extender, and PapyrusUtil. Developed against the LoreRim
-modlist on Skyrim SE 1.6.1170.</Description>
+Requires: SKSE64, Address Library for SKSE Plugins, SkyUI 5.2+ (MCM), Custom
+Skills Framework (Mastery), and powerofthree's Papyrus Extender. Currently
+balanced for Requiem-based lists; developed against LoreRim on Skyrim SE
+1.6.1170. The bundled MRO.dll is required.</Description>
   <Website></Website>
 </fomod>
