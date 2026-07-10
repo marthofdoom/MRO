@@ -56,50 +56,6 @@ Default: ON. Toggle in MCM > Features.</description>
       </optionalFileGroups>
     </installStep>
 
-    <installStep name="Quality of Life Features">
-      <optionalFileGroups order="Explicit">
-        <group name="Always installed - toggle each in the MCM under Features" type="SelectAll">
-          <plugins order="Explicit">
-
-            <plugin name="Vendor Gold Doubled">
-              <description>All 13 vendor gold pools (general goods, blacksmiths, apothecaries, inns, spell vendors, street vendors, and all five fence tiers) carry double the gold. MRO.dll doubles the leveled lists in memory at every game load, so it adapts to any load order automatically.
-
-Applied by the native plugin; cannot be toggled at runtime.</description>
-              <files/>
-              <typeDescriptor><type name="Required"/></typeDescriptor>
-            </plugin>
-
-            <plugin name="Carry Weight +150">
-              <description>You and your followers receive a permanent +150 carry weight ability. Enough to haul a full potion stock and loot without constant inventory management.
-
-Default: ON. Toggle in MCM > Features.</description>
-              <files/>
-              <typeDescriptor><type name="Required"/></typeDescriptor>
-            </plugin>
-
-            <plugin name="Arrow Recovery 66%">
-              <description>Arrows recovered from bodies at 66% instead of the vanilla 33%. Archery ammunition stays affordable without being infinite.
-
-Default: ON. Toggle in MCM > Features.</description>
-              <files/>
-              <typeDescriptor><type name="Required"/></typeDescriptor>
-            </plugin>
-
-            <plugin name="Faster Cell Reset (off by default)">
-              <description>Optional: speeds cell respawn to restock shops and repopulate dungeons faster than Requiem's long timers.
-
-DEFAULT OFF, and left off is recommended. Respawn in Skyrim is all-or-nothing: turning this on also returns display and quest items to cells and can revert one-time activators (for example, Blackreach lifts). Only enable it if you accept that trade-off.
-
-Toggle in MCM > Features.</description>
-              <files/>
-              <typeDescriptor><type name="Required"/></typeDescriptor>
-            </plugin>
-
-          </plugins>
-        </group>
-      </optionalFileGroups>
-    </installStep>
-
     <installStep name="Skill Mastery System">
       <optionalFileGroups order="Explicit">
         <group name="Skill Mastery" type="SelectExactlyOne">

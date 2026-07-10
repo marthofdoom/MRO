@@ -4,6 +4,34 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## Unreleased (v0.10.0)
+
+### Added
+- **Progress tab.** Per-skill mastery levels and percent-to-next now live on
+  their own MCM page (grouped Combat / Defense / Magic / Crafting / Commerce),
+  instead of being buried in the Mastery settings page.
+
+### Changed
+- **XP-speed sliders consolidated: 14 per-skill dials -> 5 group dials**
+  (Combat, Defense, Magic, Crafting, Commerce). Group sliders write the same
+  per-skill globals underneath, so existing saves and the ESP are untouched;
+  old per-skill values re-unify the first time a group slider is accepted.
+
+### Removed (scope cuts, user-approved 2026-07-09)
+- **Carry Weight +150** — toggle, ability, and follower grants deleted.
+  SCRIPT_VERSION 8 migration strips the spell from the player and followers
+  on existing saves.
+- **Arrow Recovery 66%** and **Faster Cell Reset** — toggles and GMST writes
+  deleted; the GMSTs were runtime-only, so the load order's values return on
+  next game load. Migration forces both feature globals off.
+- **Weapon XP Pace dial** (0x808) — dead since v0.9.12 dropped the divisor in
+  the native path; slider removed from Tuning.
+- MCM sections for the above (Quality of Life, Baked Into ESP / Vendor Gold,
+  Carry Weight live-status row) and the FOMOD "Quality of Life Features" page.
+- **PENDING BEFORE RELEASE: vendor gold doubling still happens in MRO.dll** —
+  the FOMOD/MCM no longer mention it, so the native pass (DLL-required cut,
+  diagnostics strip, vendor-gold removal) MUST land before v0.10.0 is cut.
+
 ## v0.9.13 — 2026-07-09 (alpha)
 
 ### Fixed

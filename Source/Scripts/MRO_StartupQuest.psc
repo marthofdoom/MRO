@@ -22,6 +22,9 @@ GlobalVariable Property MRO_T_WeaponMasteryBonus Auto  ; weapon mastery bonus % 
 GlobalVariable Property MRO_F_ResistCap     Auto
 GlobalVariable Property MRO_F_ArmorCap      Auto
 GlobalVariable Property MRO_F_Absorb        Auto
+; Features cut in v0.10.0; properties (and MRO_CarryWeightAbility above) are
+; kept ONLY so the v8 migration can force them off / strip the spell on
+; existing saves. No application code reads them anymore.
 GlobalVariable Property MRO_F_CarryWeight   Auto
 GlobalVariable Property MRO_F_ArrowRecovery Auto
 GlobalVariable Property MRO_F_CellReset     Auto
@@ -77,7 +80,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 7 AutoReadOnly
+Int Property SCRIPT_VERSION = 8 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -343,6 +346,35 @@ Function RunUpgrade(Int fromVersion)
         MRO_F_CellReset.SetValue(0.0)
     EndIf
 
+    ; v8 (v0.10.0): scope cut -- carry weight +150, arrow recovery 66%, and
+    ; cell reset are removed entirely. Force the toggles off and strip the
+    ; carry-weight spell everywhere; the GMSTs the old code set are runtime-
+    ; only, so the load order's own values win again on the next game load.
+    If fromVersion > 0 && fromVersion < 8
+        If MRO_F_CarryWeight
+            MRO_F_CarryWeight.SetValue(0.0)
+        EndIf
+        If MRO_F_ArrowRecovery
+            MRO_F_ArrowRecovery.SetValue(0.0)
+        EndIf
+        If MRO_F_CellReset
+            MRO_F_CellReset.SetValue(0.0)
+        EndIf
+        If MRO_CarryWeightAbility
+            If PlayerRef.HasSpell(MRO_CarryWeightAbility)
+                PlayerRef.RemoveSpell(MRO_CarryWeightAbility)
+            EndIf
+            Actor[] cwFols = PO3_SKSEFunctions.GetPlayerFollowers()
+            Int cwi = 0
+            While cwFols && cwi < cwFols.Length
+                If cwFols[cwi] && cwFols[cwi].HasSpell(MRO_CarryWeightAbility)
+                    cwFols[cwi].RemoveSpell(MRO_CarryWeightAbility)
+                EndIf
+                cwi += 1
+            EndWhile
+        EndIf
+    EndIf
+
     ; Re-assert everything that must survive an update: settings,
     ; abilities, and event registrations (all idempotent).
     ApplyGMSTFeatures()
@@ -362,7 +394,7 @@ EndFunction
 ; FIRST-RUN INTRO
 ; ===============================================================
 Function RunFirstTimeSetup()
-    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs that element's damage as health\n  (101% = 1% absorbed, 200% = full absorb)\n- Physical DR scales past the 75% armor cap, gated by your armor mastery\n- Vendor gold doubled\n- 14-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
+    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs that element's damage as health\n  (101% = 1% absorbed, 200% = full absorb)\n- Physical DR scales past the 75% armor cap, gated by your armor mastery\n- 14-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
 EndFunction
 
 ; ===============================================================
@@ -374,15 +406,6 @@ Function ApplyGMSTFeatures()
     EndIf
 
     UpdateArmorDRFor(PlayerRef)
-
-    If FeatureEnabled(MRO_F_ArrowRecovery)
-        Game.SetGameSettingInt("iArrowInventoryChance", 66)
-    EndIf
-
-    If FeatureEnabled(MRO_F_CellReset)
-        Game.SetGameSettingInt("iHoursToRespawnCell",        72)
-        Game.SetGameSettingInt("iHoursToRespawnCellCleared", 168)
-    EndIf
 EndFunction
 
 ; ===============================================================
@@ -397,11 +420,6 @@ Function GiveAbilitiesTo(Actor akActor)
             akActor.AddSpell(MRO_AbsorbAbility, false)
         EndIf
     EndIf
-    If FeatureEnabled(MRO_F_CarryWeight)
-        If !akActor.HasSpell(MRO_CarryWeightAbility)
-            akActor.AddSpell(MRO_CarryWeightAbility, false)
-        EndIf
-    EndIf
 EndFunction
 
 Function RefreshAbilities()
@@ -412,15 +430,6 @@ Function RefreshAbilities()
     Else
         If PlayerRef.HasSpell(MRO_AbsorbAbility)
             PlayerRef.RemoveSpell(MRO_AbsorbAbility)
-        EndIf
-    EndIf
-    If FeatureEnabled(MRO_F_CarryWeight)
-        If !PlayerRef.HasSpell(MRO_CarryWeightAbility)
-            PlayerRef.AddSpell(MRO_CarryWeightAbility, false)
-        EndIf
-    Else
-        If PlayerRef.HasSpell(MRO_CarryWeightAbility)
-            PlayerRef.RemoveSpell(MRO_CarryWeightAbility)
         EndIf
     EndIf
 EndFunction
@@ -582,13 +591,6 @@ Function RefreshFollowerAbilities()
                 EndIf
             ElseIf f.HasSpell(MRO_AbsorbAbility)
                 f.RemoveSpell(MRO_AbsorbAbility)
-            EndIf
-            If FeatureEnabled(MRO_F_CarryWeight)
-                If !f.HasSpell(MRO_CarryWeightAbility)
-                    f.AddSpell(MRO_CarryWeightAbility, false)
-                EndIf
-            ElseIf f.HasSpell(MRO_CarryWeightAbility)
-                f.RemoveSpell(MRO_CarryWeightAbility)
             EndIf
         EndIf
         i += 1

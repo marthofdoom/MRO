@@ -21,10 +21,9 @@ Core features:
   weak enemies earns nothing and 1H/2H train at parity); magic XP is weighted
   by magicka spent. Bonuses at full mastery: weapons +50% damage, armor +300
   rating, magic +50 effective skill, crafting +25%, plus a Speech barter ladder
-- Vendor gold doubled in memory at load, adapting to any load order
-- Quality of life: party-wide +150 carry weight and 66% arrow recovery
-- MCM: live feature toggles, per-skill mastery progress and tuning sliders,
-  and a Live Status panel showing your real DR% and per-element absorb
+- MCM: live feature toggles, a Progress tab with per-skill mastery levels,
+  per-group XP-speed and tuning sliders, and a Live Status panel showing
+  your real DR% and per-element absorb
 - Optional Experience.ini: same total leveling speed as Faster Leveling,
   weighted toward kills and quests over pure exploration
 

@@ -11,9 +11,6 @@ GlobalVariable  Property MRO_MasteryCap         Auto
 GlobalVariable  Property MRO_F_ResistCap        Auto
 GlobalVariable  Property MRO_F_ArmorCap         Auto
 GlobalVariable  Property MRO_F_Absorb           Auto
-GlobalVariable  Property MRO_F_CarryWeight      Auto
-GlobalVariable  Property MRO_F_ArrowRecovery    Auto
-GlobalVariable  Property MRO_F_CellReset        Auto
 GlobalVariable  Property MRO_T_AbsorbMax        Auto
 GlobalVariable  Property MRO_T_DR99Armor        Auto
 GlobalVariable  Property MRO_T_ArmorMasteryBonus  Auto
@@ -23,11 +20,7 @@ GlobalVariable  Property MRO_T_WeaponMasteryBonus Auto
 Int _oidResistCap   = -1
 Int _oidArmorCap    = -1
 Int _oidAbsorb      = -1
-Int _oidCarryWeight = -1
-Int _oidArrowRecov  = -1
-Int _oidCellReset   = -1
 Int _oidMastery     = -1
-Int _oidVendorGold  = -1
 
 ; Slider option IDs
 Int _oidMasteryCap  = -1
@@ -36,11 +29,12 @@ Int _oidDR99Armor   = -1
 Int _oidArmorMastB  = -1
 Int _oidWeapMastB   = -1
 Int _oidXPSpeed     = -1
-Int _oidWeapXP      = -1
 Int _oidMagicXP     = -1
 
-; Per-skill XP-speed slider OIDs, index = SkillIndex order (0-13)
-Int[] _oidXpm
+; Group XP-speed slider OIDs: 0=Combat 1=Defense 2=Magic 3=Crafting 4=Commerce.
+; One dial per skill family; accepting a value writes every member skill's
+; per-skill global, so the ESP and existing saves stay untouched.
+Int[] _oidXpg
 
 ; Mastery skill-row OIDs, index = SkillIndex order (0-13). Highlight shows
 ; that skill's current bonus in the bottom bar.
@@ -107,18 +101,41 @@ EndFunction
 
 Function SetupPages()
     ModName = "marth Requiem Overhaul"
-    Pages = new String[2]
+    Pages = new String[3]
     Pages[0] = "Mastery"
-    Pages[1] = "Features"
+    Pages[1] = "Progress"
+    Pages[2] = "Features"
 EndFunction
 
 Event OnPageReset(String a_page)
+    ResetOids()
     If a_page == "Mastery"
         RenderMastery()
+    ElseIf a_page == "Progress"
+        RenderProgress()
     ElseIf a_page == "Features"
         RenderFeatures()
     EndIf
 EndEvent
+
+; SkyUI option IDs restart on every page render, so an oid recorded on one
+; page can collide with an option on another. Forget everything before each
+; render; only the page being drawn repopulates its own handles.
+Function ResetOids()
+    _oidResistCap  = -1
+    _oidArmorCap   = -1
+    _oidAbsorb     = -1
+    _oidMastery    = -1
+    _oidMasteryCap = -1
+    _oidAbsorbMax  = -1
+    _oidDR99Armor  = -1
+    _oidArmorMastB = -1
+    _oidWeapMastB  = -1
+    _oidXPSpeed    = -1
+    _oidMagicXP    = -1
+    _oidXpg   = None
+    _oidSkill = None
+EndFunction
 
 ; ==========================================================
 ; TOGGLE HANDLING
@@ -154,24 +171,6 @@ Event OnOptionSelect(Int a_option)
         MRO_F_Absorb.SetValue(newVal as Float)
         SetToggleOptionValue(_oidAbsorb, newVal)
         NudgeQuest(false, true)
-
-    ElseIf a_option == _oidCarryWeight
-        Bool newVal = !FEnabled(MRO_F_CarryWeight)
-        MRO_F_CarryWeight.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidCarryWeight, newVal)
-        NudgeQuest(false, true)
-
-    ElseIf a_option == _oidArrowRecov
-        Bool newVal = !FEnabled(MRO_F_ArrowRecovery)
-        MRO_F_ArrowRecovery.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidArrowRecov, newVal)
-        NudgeQuest(true, false)
-
-    ElseIf a_option == _oidCellReset
-        Bool newVal = !FEnabled(MRO_F_CellReset)
-        MRO_F_CellReset.SetValue(newVal as Float)
-        SetToggleOptionValue(_oidCellReset, newVal)
-        NudgeQuest(true, false)
 
     ElseIf a_option == _oidMastery
         Bool newVal = !FEnabled(MRO_MasteryEnabled)
@@ -210,19 +209,17 @@ Event OnOptionSliderOpen(Int a_option)
         SliderSetup(MRO_T_WeaponMasteryBonus, 50.0, 0.0, 100.0, 5.0)
     ElseIf a_option == _oidXPSpeed
         SliderSetup(MRO_MasteryBaseGrant, 1.0, 0.25, 4.0, 0.25)
-    ElseIf a_option == _oidWeapXP
-        SliderSetup(Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable, 1.0, 0.25, 5.0, 0.25)
     ElseIf a_option == _oidMagicXP
         SliderSetup(Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable, 150.0, 25.0, 500.0, 25.0)
     Else
-        Int xi = XpmIndexOf(a_option)
-        If xi >= 0
+        Int gi = XpgIndexOf(a_option)
+        If gi >= 0
             MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
             Float def = 1.0
-            If xi < 3
+            If gi == 0
                 def = 2.5   ; weapon skills default faster
             EndIf
-            SliderSetup(q.XPSpeedGlobalByIndex(xi), def, 0.25, 5.0, 0.25)
+            SliderSetup(q.XPSpeedGlobalByIndex(GroupFirstSkill(gi)), def, 0.25, 5.0, 0.25)
         EndIf
     EndIf
 EndEvent
@@ -254,17 +251,24 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     ElseIf a_option == _oidXPSpeed
         gv = MRO_MasteryBaseGrant
         fmt = "{2}"
-    ElseIf a_option == _oidWeapXP
-        gv = Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable
-        fmt = "{2}"
     ElseIf a_option == _oidMagicXP
         gv = Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable
     Else
-        Int xi = XpmIndexOf(a_option)
-        If xi >= 0
+        Int gi = XpgIndexOf(a_option)
+        If gi >= 0
+            ; Group slider: write every member skill's per-skill global.
             MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
-            gv = q.XPSpeedGlobalByIndex(xi)
-            fmt = "{2}x"
+            Int si = GroupFirstSkill(gi)
+            Int last = GroupLastSkill(gi)
+            While si <= last
+                GlobalVariable mg = q.XPSpeedGlobalByIndex(si)
+                If mg
+                    mg.SetValue(a_value)
+                EndIf
+                si += 1
+            EndWhile
+            SetSliderOptionValue(a_option, a_value, "{2}x")
+            Return
         EndIf
     EndIf
     If gv
@@ -284,16 +288,8 @@ Event OnOptionHighlight(Int a_option)
         SetInfoText("MASTERY PERK: physical DR past the engine cap requires the matching armor mastery. Your reachable ceiling grows with mastery level (99% only at full mastery AND max armor). Followers share your mastery. Armor UI still displays the engine cap.")
     ElseIf a_option == _oidAbsorb
         SetInfoText("Resistance above 100% heals you for that element's damage: 1% per point over 100, full heal at the Tuning slider value (default 200%). Covers spells, enchants, drains, poisons.")
-    ElseIf a_option == _oidCarryWeight
-        SetInfoText("Permanent +150 carry weight for you and your followers.")
-    ElseIf a_option == _oidArrowRecov
-        SetInfoText("Recover arrows from bodies 66% of the time (vanilla 33%).")
-    ElseIf a_option == _oidCellReset
-        SetInfoText("OFF by default. Speeds cell respawn (3/7 days) to restock shops and repopulate dungeons -- but respawn is all-or-nothing: it also returns display/quest items to cells and can revert one-time activators (e.g. Blackreach lifts). Leave off unless you accept that.")
     ElseIf a_option == _oidMastery
         SetInfoText("14 skills that unlock at base skill 100 and grow with use. Armor masteries need a matching chest piece worn.")
-    ElseIf a_option == _oidVendorGold
-        SetInfoText("All 13 vendor gold pools doubled at game load by MRO.dll - adapts to any load order. Merchants pick it up on their next restock.")
     ElseIf a_option == _oidMasteryCap
         SetInfoText("Levels each mastery needs for its full bonus (50-200). Cost rises steeply with level; weapons and magic use an extra-steep endgame curve, so the final levels cost many times the first. Each skill trains on its own action: weapon damage dealt, magicka spent, combat time, or craft/barter sessions.")
     ElseIf a_option == _oidAbsorbMax
@@ -306,12 +302,10 @@ Event OnOptionHighlight(Int a_option)
         SetInfoText("Attack damage bonus (percent) granted by a fully-leveled weapon mastery.")
     ElseIf a_option == _oidXPSpeed
         SetInfoText("Global mastery XP speed multiplier. 2 = levels twice as fast, 0.5 = half speed.")
-    ElseIf a_option == _oidWeapXP
-        SetInfoText("Weapon mastery pace: hits per XP action (higher = slower). Applies to all weapon skills and scales the whole weapon curve. Default 1.0.")
     ElseIf a_option == _oidMagicXP
         SetInfoText("Magic mastery pace: magicka spent per XP action (higher = slower). Bigger spells train more; cheap spam trains little. Default 150.")
-    ElseIf XpmIndexOf(a_option) >= 0
-        SetInfoText("XP-speed multiplier for THIS mastery only. 2.5 = 2.5x faster to the next level. Weapon skills default to 2.5 (they train slower than armor/magic); everything else defaults to 1.")
+    ElseIf XpgIndexOf(a_option) >= 0
+        SetInfoText("XP-speed multiplier for every mastery in this group. 2.5 = 2.5x faster to the next level. Combat defaults to 2.5 (weapon skills train slower than armor/magic); the rest default to 1.")
     ElseIf MasteryOidIndex(a_option) >= 0
         MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
         If q
@@ -346,53 +340,56 @@ Function RenderMastery()
     AddEmptyOption()
 
     If q
-        _oidSkill = new Int[14]
-        AddHeaderOption("Combat")
-        RenderSkillRow(q, "One-Handed",  q.ID_OH, 0)
-        RenderSkillRow(q, "Two-Handed",  q.ID_TH, 1)
-        RenderSkillRow(q, "Archery",     q.ID_MK, 2)
-        AddEmptyOption()
-
-        AddHeaderOption("Defense")
-        RenderSkillRow(q, "Evasion",     q.ID_LA, 3)
-        RenderSkillRow(q, "Heavy Armor", q.ID_HA, 4)
-        AddEmptyOption()
-
-        AddHeaderOption("Magic")
-        RenderSkillRow(q, "Destruction", q.ID_DS, 5)
-        RenderSkillRow(q, "Restoration", q.ID_RS, 6)
-        RenderSkillRow(q, "Alteration",  q.ID_AL, 7)
-        RenderSkillRow(q, "Conjuration", q.ID_CJ, 8)
-        RenderSkillRow(q, "Illusion",    q.ID_IL, 9)
-        AddEmptyOption()
-
-        AddHeaderOption("Crafting")
-        RenderSkillRow(q, "Smithing",    q.ID_SM, 10)
-        RenderSkillRow(q, "Alchemy",     q.ID_AC, 11)
-        RenderSkillRow(q, "Enchanting",  q.ID_EN, 12)
-        AddEmptyOption()
-
-        AddHeaderOption("Commerce")
-        RenderSkillRow(q, "Speech",      q.ID_SP, 13)
-        AddEmptyOption()
-
-        AddHeaderOption("XP Speed (per skill)")
-        _oidXpm = new Int[14]
-        RenderXpmSlider(q, "One-Handed",  0)
-        RenderXpmSlider(q, "Two-Handed",  1)
-        RenderXpmSlider(q, "Archery",     2)
-        RenderXpmSlider(q, "Evasion",     3)
-        RenderXpmSlider(q, "Heavy Armor", 4)
-        RenderXpmSlider(q, "Destruction", 5)
-        RenderXpmSlider(q, "Restoration", 6)
-        RenderXpmSlider(q, "Alteration",  7)
-        RenderXpmSlider(q, "Conjuration", 8)
-        RenderXpmSlider(q, "Illusion",    9)
-        RenderXpmSlider(q, "Smithing",    10)
-        RenderXpmSlider(q, "Alchemy",     11)
-        RenderXpmSlider(q, "Enchanting",  12)
-        RenderXpmSlider(q, "Speech",      13)
+        AddHeaderOption("XP Speed (per group)")
+        _oidXpg = new Int[5]
+        RenderXpgSlider(q, "Combat",   0)
+        RenderXpgSlider(q, "Defense",  1)
+        RenderXpgSlider(q, "Magic",    2)
+        RenderXpgSlider(q, "Crafting", 3)
+        RenderXpgSlider(q, "Commerce", 4)
     EndIf
+EndFunction
+
+; ==========================================================
+; PROGRESS PAGE — per-skill mastery levels, read-only
+; ==========================================================
+
+Function RenderProgress()
+    MRO_StartupQuest q = MRO_Quest as MRO_StartupQuest
+    If !q
+        Return
+    EndIf
+
+    SetCursorFillMode(TOP_TO_BOTTOM)
+
+    _oidSkill = new Int[14]
+    AddHeaderOption("Combat")
+    RenderSkillRow(q, "One-Handed",  q.ID_OH, 0)
+    RenderSkillRow(q, "Two-Handed",  q.ID_TH, 1)
+    RenderSkillRow(q, "Archery",     q.ID_MK, 2)
+    AddEmptyOption()
+
+    AddHeaderOption("Defense")
+    RenderSkillRow(q, "Evasion",     q.ID_LA, 3)
+    RenderSkillRow(q, "Heavy Armor", q.ID_HA, 4)
+    AddEmptyOption()
+
+    AddHeaderOption("Magic")
+    RenderSkillRow(q, "Destruction", q.ID_DS, 5)
+    RenderSkillRow(q, "Restoration", q.ID_RS, 6)
+    RenderSkillRow(q, "Alteration",  q.ID_AL, 7)
+    RenderSkillRow(q, "Conjuration", q.ID_CJ, 8)
+    RenderSkillRow(q, "Illusion",    q.ID_IL, 9)
+    AddEmptyOption()
+
+    AddHeaderOption("Crafting")
+    RenderSkillRow(q, "Smithing",    q.ID_SM, 10)
+    RenderSkillRow(q, "Alchemy",     q.ID_AC, 11)
+    RenderSkillRow(q, "Enchanting",  q.ID_EN, 12)
+    AddEmptyOption()
+
+    AddHeaderOption("Commerce")
+    RenderSkillRow(q, "Speech",      q.ID_SP, 13)
 EndFunction
 
 ; One compact row per skill: "level/cap +bonus% (progress% to next)".
@@ -426,23 +423,53 @@ Int Function MasteryOidIndex(Int a_option)
     Return -1
 EndFunction
 
-Function RenderXpmSlider(MRO_StartupQuest q, String label, Int idx)
+; SkillIndex range for an XP-speed group (contiguous by construction):
+; Combat 0-2, Defense 3-4, Magic 5-9, Crafting 10-12, Commerce 13.
+Int Function GroupFirstSkill(Int gi)
+    If gi == 0
+        Return 0
+    ElseIf gi == 1
+        Return 3
+    ElseIf gi == 2
+        Return 5
+    ElseIf gi == 3
+        Return 10
+    EndIf
+    Return 13
+EndFunction
+
+Int Function GroupLastSkill(Int gi)
+    If gi == 0
+        Return 2
+    ElseIf gi == 1
+        Return 4
+    ElseIf gi == 2
+        Return 9
+    ElseIf gi == 3
+        Return 12
+    EndIf
+    Return 13
+EndFunction
+
+; Displayed value = the group's first member (members only diverge if an old
+; save carries per-skill values from the pre-group MCM; accepting re-unifies).
+Function RenderXpgSlider(MRO_StartupQuest q, String label, Int gi)
     Float cur = 1.0
-    GlobalVariable g = q.XPSpeedGlobalByIndex(idx)
+    GlobalVariable g = q.XPSpeedGlobalByIndex(GroupFirstSkill(gi))
     If g
         cur = g.GetValue()
     EndIf
-    _oidXpm[idx] = AddSliderOption(label, cur, "{2}x")
+    _oidXpg[gi] = AddSliderOption(label, cur, "{2}x")
 EndFunction
 
-; Returns the SkillIndex for an XP-speed slider oid, or -1 if not one.
-Int Function XpmIndexOf(Int a_option)
-    If !_oidXpm
+; Returns the group index for an XP-speed group slider oid, or -1 if not one.
+Int Function XpgIndexOf(Int a_option)
+    If !_oidXpg
         Return -1
     EndIf
     Int i = 0
-    While i < 14
-        If _oidXpm[i] == a_option
+    While i < 5
+        If _oidXpg[i] == a_option
             Return i
         EndIf
         i += 1
@@ -468,12 +495,6 @@ Function RenderFeatures()
     _oidArmorCap   = AddToggleOption("Physical DR Past 75%",      FEnabled(MRO_F_ArmorCap))
     AddEmptyOption()
 
-    AddHeaderOption("Quality of Life")
-    _oidCarryWeight = AddToggleOption("Carry Weight +150",  FEnabled(MRO_F_CarryWeight))
-    _oidArrowRecov  = AddToggleOption("Arrow Recovery 66%", FEnabled(MRO_F_ArrowRecovery))
-    _oidCellReset   = AddToggleOption("Faster Cell Reset",  FEnabled(MRO_F_CellReset))
-    AddEmptyOption()
-
     AddHeaderOption("Mastery")
     _oidMastery = AddToggleOption("Skill Mastery System", FEnabled(MRO_MasteryEnabled))
     AddEmptyOption()
@@ -484,7 +505,6 @@ Function RenderFeatures()
     _oidArmorMastB = AddSliderOption("Armor Mastery Bonus",   SliderVal(MRO_T_ArmorMasteryBonus, 300.0), "{0}")
     _oidWeapMastB  = AddSliderOption("Weapon Mastery Bonus",  SliderVal(MRO_T_WeaponMasteryBonus, 50.0), "{0}%")
     _oidXPSpeed    = AddSliderOption("Mastery XP Speed",      SliderVal(MRO_MasteryBaseGrant, 1.0), "{2}")
-    _oidWeapXP     = AddSliderOption("Weapon XP Pace", SliderVal(Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable, 1.0), "{2}")
     _oidMagicXP    = AddSliderOption("Magic XP Pace",  SliderVal(Game.GetFormFromFile(0x846, "MRO.esp") as GlobalVariable, 150.0), "{0}")
     AddEmptyOption()
 
@@ -521,20 +541,11 @@ Function RenderFeatures()
         absorbState = "Active"
     EndIf
     AddTextOption("Absorb Ability", absorbState)
-    String cwState = "Off"
-    If FEnabled(MRO_F_CarryWeight) && q.MRO_CarryWeightAbility && player.HasSpell(q.MRO_CarryWeightAbility)
-        cwState = "Active"
-    EndIf
-    AddTextOption("Carry Weight Ability", cwState)
     AddTextOption("Fire",   ResistStatus(player, "FireResist"))
     AddTextOption("Frost",  ResistStatus(player, "FrostResist"))
     AddTextOption("Shock",  ResistStatus(player, "ElectricResist"))
     AddTextOption("Magic",  ResistStatus(player, "MagicResist"))
     AddTextOption("Poison", ResistStatus(player, "PoisonResist"))
-    AddEmptyOption()
-
-    AddHeaderOption("Baked Into ESP")
-    _oidVendorGold = AddTextOption("Vendor Gold", "Doubled")
     AddEmptyOption()
 
     AddHeaderOption("About")
