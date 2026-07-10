@@ -160,22 +160,11 @@ Event OnUpdate()
         Return
     EndIf
 
-    ; With the DLL present, weapon/armor XP is credited per hit and the level-up
-    ; sound + bonus reconcile are driven by mod events (OnNative* handlers). The
-    ; 30s heartbeat is retired: reconcile once here (covers a pending update that
-    ; fired on load) and do NOT reschedule. Falls through to the legacy tick only
-    ; when the DLL is absent, so no-DLL installs still work.
-    If NativeWeaponXPActive()
-        ReconcileAll()
-        Return
-    EndIf
-
-    ; ---- No-DLL fallback: the legacy 30s heartbeat ----
+    ; MRO.dll is REQUIRED (v0.10.0): weapon/armor XP is credited per hit and
+    ; the level-up sound + bonus reconcile are driven by mod events (OnNative*
+    ; handlers). Reconcile once here (covers a pending update that fired on
+    ; load) and never reschedule — the legacy no-DLL heartbeat is deleted.
     ReconcileAll()
-    If MasteryEnabled() && PlayerRef.IsInCombat()
-        GrantCombatArmorXP()
-    EndIf
-    RegisterForSingleUpdate(30.0)
 EndEvent
 
 ; ===============================================================
@@ -211,13 +200,6 @@ Event OnNativeGameLoaded(String eventName, String strArg, Float numArg, Form sen
         _installedVersion = SCRIPT_VERSION
     EndIf
     ReconcileAll()
-    ; If the DLL is present but its hook stood down this session (a game update
-    ; failed the site check, or bPhysicalDRHook=0), weapon XP falls back to
-    ; HandleWeaponHit, but armor XP still needs GrantCombatArmorXP on the
-    ; heartbeat -- re-arm the fallback tick that the native branch had retired.
-    If !NativeWeaponXPActive()
-        RegisterForSingleUpdate(30.0)
-    EndIf
 EndEvent
 
 ; DLL fires this when it credits a weapon/armor mastery level (numArg = skill
@@ -456,23 +438,6 @@ Bool Function NativeDRActive()
     Return g && g.GetValueInt() == 1
 EndFunction
 
-; Native weapon-XP (Model 2, docs/WEAPON_XP_MODELS.md). When the DLL's
-; weapon-hit measuring is live it banks the player's credited weapon
-; damage into MRO_X_Pend* (overkill excluded), and the Papyrus per-hit
-; grant in HandleWeaponHit stands down in favour of DrainNativeWeaponXP.
-Bool Function NativeWeaponXPActive()
-    GlobalVariable g = Game.GetFormFromFile(0x81C, "MRO.esp") as GlobalVariable
-    Return g && g.GetValueInt() == 1
-EndFunction
-
-; Native armor-XP: the DLL banks normalized armor hits-taken (victim side of
-; the same hook) into MRO_X_PendArmor; DrainNativeArmorXP credits Evasion or
-; Heavy per the worn chest, replacing the Papyrus GrantCombatArmorXP tick.
-Bool Function NativeArmorXPActive()
-    GlobalVariable g = Game.GetFormFromFile(0x847, "MRO.esp") as GlobalVariable
-    Return g && g.GetValueInt() == 1
-EndFunction
-
 ; MCM Testing button: grant REAL armor mastery levels via CSF and push
 ; them to whichever DR engine is live, immediately. Real levels survive
 ; the 30s heartbeat (unlike console writes to the bridge globals, which
@@ -641,25 +606,8 @@ Function HandleWeaponHit(ObjectReference akTarget, Form akSource, Projectile akP
     If w && GetWeaponSkill(w) != _activeWeaponSkill
         UpdateWeaponMasteryBonus()
     EndIf
-    ; Native path: the DLL credits weapon XP per hit; stand the Papyrus grant down.
-    If NativeWeaponXPActive()
-        Return
-    EndIf
-    Actor victim = akTarget as Actor
-    If !victim || victim.IsDead() || !victim.IsHostileToActor(PlayerRef)
-        Return
-    EndIf
-    If !w
-        Return
-    EndIf
-    String wSkill = GetWeaponSkill(w)
-    If wSkill == "OH" && PlayerRef.GetBaseActorValue("OneHanded") >= 100.0
-        GrantMasteryXP(ID_OH, GetMasteryLevel(ID_OH))
-    ElseIf wSkill == "TH" && PlayerRef.GetBaseActorValue("TwoHanded") >= 100.0
-        GrantMasteryXP(ID_TH, GetMasteryLevel(ID_TH))
-    ElseIf wSkill == "MK" && PlayerRef.GetBaseActorValue("Marksman") >= 100.0
-        GrantMasteryXP(ID_MK, GetMasteryLevel(ID_MK))
-    EndIf
+    ; Weapon XP itself is credited per hit by the REQUIRED MRO.dll; the old
+    ; Papyrus per-hit grant fallback was deleted in v0.10.0.
 EndFunction
 
 ; ===============================================================
@@ -785,67 +733,6 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
     If rg
         rg.SetValue(_mxp[idx])
     EndIf
-EndFunction
-
-; ===============================================================
-; NATIVE WEAPON XP DRAIN (normalized model v0.9.1 - docs/WEAPON_XP_MODELS.md)
-; The DLL banks NORMALIZED actions into MRO_X_Pend{OH,TH,MK}: each credited
-; hit (capped at the target's remaining HP, so overkill earns nothing) is
-; divided by the player's own typical per-hit damage, so ~one solid hit == one
-; action regardless of the load order's damage economy or the player's build
-; power. Each heartbeat we feed those actions into the SAME L^2 curve the
-; other skills use. WeaponXPPerAction is now a dimensionless pace dial
-; (hits per action; higher = slower), default 1.0.
-; ===============================================================
-Function DrainNativeWeaponXP()
-    Float perAction = 1.0
-    GlobalVariable pa = Game.GetFormFromFile(0x808, "MRO.esp") as GlobalVariable
-    If pa && pa.GetValue() > 0.0
-        perAction = pa.GetValue()
-    EndIf
-    DrainOneWeapon(ID_OH, "OneHanded", 0x81D, perAction)
-    DrainOneWeapon(ID_TH, "TwoHanded", 0x81E, perAction)
-    DrainOneWeapon(ID_MK, "Marksman",  0x81F, perAction)
-EndFunction
-
-; Drain the native armor bucket (normalized hits-taken) and credit Evasion
-; (light chest) or Heavy Armor (heavy chest); no chest -> discard. Gated on the
-; matching base skill being capped, like the other masteries.
-Function DrainNativeArmorXP()
-    GlobalVariable pend = Game.GetFormFromFile(0x848, "MRO.esp") as GlobalVariable
-    If !pend
-        Return
-    EndIf
-    Float acts = pend.GetValue()
-    pend.SetValue(0.0)                ; always consume so the bucket never grows unbounded
-    If acts <= 0.0 || !MasteryEnabled()
-        Return
-    EndIf
-    Int wc = WornChestWeightClass()  ; 0 = light, 1 = heavy, -1 = none
-    If wc == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
-        GrantMasteryXPAmount(ID_LA, GetMasteryLevel(ID_LA), acts)
-    ElseIf wc == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
-        GrantMasteryXPAmount(ID_HA, GetMasteryLevel(ID_HA), acts)
-    EndIf
-EndFunction
-
-Function DrainOneWeapon(String skillId, String baseAV, Int pendFormId, Float perAction)
-    GlobalVariable pend = Game.GetFormFromFile(pendFormId, "MRO.esp") as GlobalVariable
-    If !pend
-        Return
-    EndIf
-    Float dmg = pend.GetValue()
-    pend.SetValue(0.0)                ; always consume so the bucket never grows unbounded
-    If dmg <= 0.0
-        Return
-    EndIf
-    If !MasteryEnabled()
-        Return                        ; measuring, but mastery off: discard
-    EndIf
-    If PlayerRef.GetBaseActorValue(baseAV) < 100.0
-        Return                        ; base skill not capped yet: no mastery XP
-    EndIf
-    GrantMasteryXPAmount(skillId, GetMasteryLevel(skillId), dmg / perAction)
 EndFunction
 
 ; Like GrantMasteryXP but banks a fractional/multi-"action" amount in one
@@ -1302,15 +1189,6 @@ Function ApplySmithingMastery()
     Float frac = GetMasteryFraction(ID_SM)
     Game.SetGameSettingFloat("fSmithingArmorMax",  _smithArmorBase  * (1.0 + frac))
     Game.SetGameSettingFloat("fSmithingWeaponMax", _smithWeaponBase * (1.0 + frac))
-EndFunction
-
-Function GrantCombatArmorXP()
-    Int wornClass = WornChestWeightClass()
-    If wornClass == 0 && PlayerRef.GetBaseActorValue("LightArmor") >= 100.0
-        GrantMasteryXP(ID_LA, GetMasteryLevel(ID_LA))
-    ElseIf wornClass == 1 && PlayerRef.GetBaseActorValue("HeavyArmor") >= 100.0
-        GrantMasteryXP(ID_HA, GetMasteryLevel(ID_HA))
-    EndIf
 EndFunction
 
 ; ===============================================================

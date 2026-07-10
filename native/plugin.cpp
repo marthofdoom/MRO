@@ -1,5 +1,4 @@
 // MRO native plugin.
-// M1 (live): vendor gold doubled in memory at data load.
 // M2 (INI-gated, default OFF): physical DR curve past the engine armor
 // cap for the player and teammates, computed per hit — replaces the
 // Papyrus perk ladder (which stands down via the MRO_G_NativeDR global).
@@ -15,12 +14,6 @@
 #include <filesystem>
 
 namespace {
-
-constexpr std::uint32_t kVendorGoldLists[] = {
-    0x00072AE7, 0x00072AE8, 0x00072AE9, 0x00072AEA, 0x00072AEB,
-    0x00072AEC, 0x00072AED, 0x00017102, 0x000D54BF, 0x000D54C0,
-    0x000D54C1, 0x000D54C2, 0x000D54C3,
-};
 
 // MRO.esp bridge globals (ESL-local FormIDs)
 constexpr std::uint32_t kFidLAFrac = 0x818;
@@ -42,11 +35,9 @@ constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked norm
 constexpr std::uint32_t kFidMasteryEna = 0x80C;    // MRO_MasteryEnabled (1/0)
 constexpr std::uint32_t kFidMasteryGnt = 0x80D;    // MRO_MasteryBaseGrant (global speed mult)
 constexpr std::uint32_t kFidMasteryCap = 0x80E;    // MRO_MasteryCap (max mastery level)
-constexpr std::uint32_t kFidWeapPace = 0x808;      // MRO_T_WeaponXPPerAction (hits per action)
 constexpr std::uint32_t kFidMLBase = 0x850;        // mastery LEVEL, +idx (0..4 native)
 constexpr std::uint32_t kFidMRBase = 0x860;        // mastery progress RATIO 0-1, +idx
 constexpr std::uint32_t kFidXpmBase = 0x870;       // per-skill XP-speed mult, +idx
-constexpr std::uint32_t kFidSkillIncSound = 0x00018538;  // Skyrim.esm UISkillIncrease (SOUN; SDSC->0x3C7CF)
 
 // Mod-event names (DLL<->Papyrus). Kept in sync with MRO_StartupQuest.psc.
 constexpr const char* kEvtLevelUp = "MRO_MasteryLevelUp";     // DLL->Papyrus: skill idx leveled
@@ -74,7 +65,6 @@ RE::TESGlobal* g_pendArmor = nullptr;
 RE::TESGlobal* g_masteryEna = nullptr;
 RE::TESGlobal* g_masteryGnt = nullptr;
 RE::TESGlobal* g_masteryCap = nullptr;
-RE::TESGlobal* g_weapPace = nullptr;
 RE::TESGlobal* g_mLvl[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };  // 0=1H 1=2H 2=bow 3=LA 4=HA
 RE::TESGlobal* g_mRat[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
 RE::TESGlobal* g_xpm[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
@@ -130,9 +120,9 @@ void WriteDefaultIni(const std::filesystem::path& path) {
         return;
     }
     out << "; marth Requiem Overhaul - native hook settings.\n"
-        << "; Both default ON. Set a value to 0 to force the Papyrus fallback\n"
-        << "; for that system. Each hook still self-verifies the game binary\n"
-        << "; and stands down safely if it does not match (see MRO.log).\n"
+        << "; Both default ON. Setting a value to 0 DISABLES that system\n"
+        << "; entirely (there is no Papyrus fallback). Each hook self-verifies\n"
+        << "; the game binary and stands down safely on a mismatch (see MRO.log).\n"
         << "[Hooks]\n"
         << "bPhysicalDRHook=1\n"
         << "bAbsorbHook=1\n";
@@ -154,24 +144,6 @@ void ReadIni() {
     }
     spdlog::info("MRO.ini: bPhysicalDRHook={} bAbsorbHook={}",
                  g_drHookWanted ? 1 : 0, g_absorbHookWanted ? 1 : 0);
-}
-
-void DoubleVendorGold() {
-    int patched = 0;
-    for (auto formID : kVendorGoldLists) {
-        auto* lvli = RE::TESForm::LookupByID<RE::TESLevItem>(formID);
-        if (!lvli) {
-            spdlog::warn("Vendor gold list {:08X} not found", formID);
-            continue;
-        }
-        for (std::uint8_t i = 0; i < lvli->numEntries; ++i) {
-            auto& entry = lvli->entries[i];
-            std::uint32_t doubled = static_cast<std::uint32_t>(entry.count) * 2u;
-            entry.count = static_cast<std::uint16_t>(std::min<std::uint32_t>(doubled, 0xFFFFu));
-        }
-        ++patched;
-    }
-    spdlog::info("Vendor gold: doubled {} of {} leveled lists", patched, std::size(kVendorGoldLists));
 }
 
 // ── Mastery XP: native curve + level-ups (v0.9.11) ────────────────────
@@ -196,42 +168,17 @@ void SendModEvent(const char* a_name, float a_num) {
 // reliably regardless of menu state. Routed through a mod-event sink so every
 // level-up (native OR Papyrus-side magic/craft/speech) uses the same path.
 void PlayLevelUpSound() {
-    // 0x18538 is a SOUN (TESSound); its SDSC descriptor (0x3C7CF) is what the
-    // audio manager plays. LookupByID form-type-checks, so we must fetch the
-    // SOUN and follow its descriptor rather than casting to BGSSoundDescriptorForm.
-    auto* soun = RE::TESForm::LookupByID<RE::TESSound>(kFidSkillIncSound);
-    if (!soun) {
-        spdlog::warn("level-up sound: SOUN {:08X} not found", kFidSkillIncSound);
-        return;
-    }
-    if (!soun->descriptor) {
-        spdlog::warn("level-up sound: SOUN has no descriptor");
-        return;
-    }
-    auto* audio = RE::BSAudioManager::GetSingleton();
-    if (!audio) {
-        spdlog::warn("level-up sound: no BSAudioManager");
-        return;
-    }
-    RE::BSSoundHandle handle;
-    const bool built = audio->BuildSoundDataFromDescriptor(handle, soun->descriptor);
-    if (!built || !handle.IsValid()) {
-        spdlog::warn("level-up sound: build failed (built={}, valid={})", built, handle.IsValid());
-        return;
-    }
-    handle.SetVolume(1.0f);
-    // A static SetPosition at the player's feet still logged play=true but was
-    // inaudible (2026-07-09). Tie the emitter to the player's 3D node instead, so
-    // the sound is spatialized relative to the listener and tracks the camera —
-    // the community-proven UI-sound recipe. Falls through as a 2D sound if the
-    // node is unavailable (e.g. mid-load).
-    if (auto* pc = RE::PlayerCharacter::GetSingleton()) {
-        if (auto* node = pc->Get3D()) {
-            handle.SetObjectToFollow(node);
-        }
-    }
-    const bool played = handle.Play();
-    spdlog::info("level-up sound: played UISkillIncrease (play={})", played);
+    // Route through the game's own interface-sound function (the one menu
+    // clicks use), resolving the descriptor by EDITOR ID. Every BSSoundHandle
+    // variant — plain 2D, SetPosition at the player, SetObjectToFollow — returned
+    // play=true yet stayed inaudible in the field (2026-07-09): this descriptor's
+    // output model needs the UI route, not a spatialized handle.
+    // "UISkillIncreaseSD" = SNDR 0x3C7CF EDID, verified against Skyrim.esm;
+    // AL ID pair validated against versionlib-1-6-1170 (52941 -> 0x97adb0).
+    using func_t = void(const char*);
+    static REL::Relocation<func_t> uiPlaySound{ RELOCATION_ID(52054, 52941) };
+    uiPlaySound("UISkillIncreaseSD");
+    spdlog::info("level-up sound: UI PlaySound(UISkillIncreaseSD)");
 }
 
 class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
@@ -300,35 +247,26 @@ bool BaseSkillCapped(RE::Actor* a_player, int a_idx) {
 // level-up, fires MRO_MasteryLevelUp so Papyrus shows the CSF message, refreshes
 // that skill's bonus, and re-publishes the armor DR fraction.
 void Credit(int a_idx, float a_actions) {
-    // DIAGNOSTIC (v0.9.11): log the first ~20 credit attempts with the exact
-    // reason, to find why a skill (1H) stalls at a fixed level/ratio. Bounded.
-    static int s_log = 0;
-    const bool doLog = s_log < 20;
     if (a_idx < 0 || a_idx >= 5 || a_actions <= 0.0f) {
         return;
     }
     if (!g_masteryEna || g_masteryEna->value == 0.0f) {
-        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP mastery disabled", a_idx); }
         return;  // mastery system off: measuring but not awarding
     }
     if (!g_mLvl[a_idx] || !g_mRat[a_idx]) {
-        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP null level/ratio global", a_idx); }
         return;  // ESP out of date
     }
     auto* player = RE::PlayerCharacter::GetSingleton();
     if (!BaseSkillCapped(player, a_idx)) {
-        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP base skill not capped", a_idx); }
         return;  // base skill not capped yet
     }
     const int cap = static_cast<int>(g_masteryCap ? g_masteryCap->value : 100.0f);
     int n = static_cast<int>(g_mLvl[a_idx]->value);
     if (n >= cap) {
-        if (doLog) { ++s_log; spdlog::info("credit idx={}: SKIP at cap n={} cap={}", a_idx, n, cap); }
         return;
     }
     const float baseGrant = (g_masteryGnt ? g_masteryGnt->value : 1.0f) * XpmSpeed(a_idx);
     float ratio = g_mRat[a_idx]->value;
-    const float ratio0 = ratio;
     if (ratio < 0.0f) {
         ratio = 0.0f;
     }
@@ -353,11 +291,6 @@ void Credit(int a_idx, float a_actions) {
     }
     g_mLvl[a_idx]->value = static_cast<float>(n);
     g_mRat[a_idx]->value = ratio;
-    if (doLog) {
-        ++s_log;
-        spdlog::info("credit idx={}: actions={:.3f} baseGrant={:.2f} ratio {:.3f}->{:.3f} level={}",
-                     a_idx, a_actions, baseGrant, ratio0, ratio, n);
-    }
     if (leveled) {
         SendModEvent(kEvtLevelUp, static_cast<float>(a_idx));
     }
@@ -377,26 +310,6 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
         return;
     }
 
-    // DIAGNOSTIC (v0.9.11): the DR ladder must read WORN + PERK armor, not spell-
-    // fortified AR (wards, flesh spells). GetActorValue = everything (incl.
-    // temporary spell modifiers); GetPermanentActorValue = base + permanent
-    // (worn + perks). Log both for the player when the total changes, so a
-    // ward-on/ward-off test reveals which bucket the spell AR lands in. If the
-    // gap tracks the ward, the fix is GetActorValue -> GetPermanentActorValue.
-    if (isPlayer) {
-        static float s_lastFull = -1.0f;
-        auto* avoDbg = a_victim->AsActorValueOwner();
-        const float arFull = avoDbg->GetActorValue(RE::ActorValue::kDamageResist);
-        float delta = arFull - s_lastFull;
-        if (delta < 0.0f) {
-            delta = -delta;
-        }
-        if (delta > 0.5f) {
-            const float arPerm = avoDbg->GetPermanentActorValue(RE::ActorValue::kDamageResist);
-            spdlog::info("DR-AR: full={:.1f} permanent={:.1f} (full-perm = spell-added AR)", arFull, arPerm);
-            s_lastFull = arFull;
-        }
-    }
 
     const auto* chest = a_victim->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
     if (!chest) {
@@ -504,8 +417,6 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     if (dmg <= 0.0f) {
         return;
     }
-    const float remaining = a_victim->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
-
     // Reference = the player's typical per-hit damage on this skill (prior
     // EMA, seeded with this hit on the first swing). Crediting credited/ref
     // makes one banked action == one typical hit, so the XP rate is invariant
@@ -523,20 +434,10 @@ void MeasureWeaponXP(RE::Actor* a_victim, const RE::HitData& a_hitData) {
     // at the target's remaining HP made a strong character (sliver kill-hits, or
     // one-shots) earn almost nothing -- weapon XP crawled ~100x too slow (1H
     // stall, 2026-07-09). The alive+hostile gates already stop dummy/townsfolk
-    // farming. DIAGNOSTIC: log dmg/remaining/ref/actions to confirm ref is a sane
-    // "typical hit" and not skewed high by an outlier (which would keep it slow).
-    // Symmetric with MeasureArmorXP: one typical hit == one action (dmg/ref). The
-    // old /pace divisor read a stale, save-persisted MRO_T_WeaponXPPerAction that
-    // a legacy build had left at ~50, taxing weapon XP ~50x and stalling 1H
-    // (2026-07-09). Per-skill pace is already the XP-speed slider (g_xpm), so the
-    // separate dial was redundant; dropped. g_weapPace lookup left for scope audit.
+    // farming. Symmetric with MeasureArmorXP: one typical hit == one action
+    // (dmg/ref). Per-skill pace is the XP-speed slider (g_xpm); the old
+    // MRO_T_WeaponXPPerAction divisor was redundant and cut in v0.10.0.
     const float actions = dmg / ref;
-    static int s_wxpLog = 0;
-    if (s_wxpLog < 12) {
-        ++s_wxpLog;
-        spdlog::info("weapon-XP: idx={} dmg={:.1f} remaining={:.1f} ref={:.1f} actions={:.3f}",
-                     idx, dmg, remaining, ref, actions);
-    }
     MasteryXP::Credit(idx, actions);
 }
 
@@ -760,26 +661,21 @@ bool Install() {
 }  // namespace Absorb
 
 // Write a DLL->Papyrus handshake global to reflect the hook's ACTUAL state:
-// 1 when the native hook is live (Papyrus fallback stands down), 0 when it is
-// not (Papyrus fallback engages). Always writing — never just skipping — is
-// what lets a user disable a hook (MRO.ini =0), or downgrade/remove the DLL,
-// and have the Papyrus path correctly take back over: GlobalVariable values
-// persist in the save, so a stale 1 would otherwise latch the fallback off.
+// 1 when the native hook is live, 0 when it is not. Always writing — never
+// just skipping — matters because GlobalVariable values persist in the save:
+// a stale 1 would otherwise misreport a hook that stood down this session
+// (MCM Live Status reads these; there is no Papyrus fallback since v0.10.0).
 void AssertHandshake(RE::TESGlobal* g, bool live, const char* label, const char* phase) {
     if (!g) {
         return;
     }
     g->value = live ? 1.0f : 0.0f;
-    spdlog::info("{}: {}={} ({})", phase, label, live ? 1 : 0,
-                 live ? "native active, Papyrus fallback stands down"
-                      : "hook not live, Papyrus fallback engaged");
+    spdlog::info("{}: {}={}", phase, label, live ? 1 : 0);
 }
 
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     switch (message->type) {
     case SKSE::MessagingInterface::kDataLoaded: {
-        DoubleVendorGold();
-
         auto* dh = RE::TESDataHandler::GetSingleton();
         if (dh) {
             g_laFrac = dh->LookupForm<RE::TESGlobal>(kFidLAFrac, "MRO.esp");
@@ -798,7 +694,6 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_masteryEna = dh->LookupForm<RE::TESGlobal>(kFidMasteryEna, "MRO.esp");
             g_masteryGnt = dh->LookupForm<RE::TESGlobal>(kFidMasteryGnt, "MRO.esp");
             g_masteryCap = dh->LookupForm<RE::TESGlobal>(kFidMasteryCap, "MRO.esp");
-            g_weapPace = dh->LookupForm<RE::TESGlobal>(kFidWeapPace, "MRO.esp");
             for (int i = 0; i < 5; ++i) {
                 g_mLvl[i] = dh->LookupForm<RE::TESGlobal>(kFidMLBase + i, "MRO.esp");
                 g_mRat[i] = dh->LookupForm<RE::TESGlobal>(kFidMRBase + i, "MRO.esp");
@@ -821,7 +716,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "data-loaded");
 
         if (auto* console = RE::ConsoleLog::GetSingleton()) {
-            console->Print("MRO native v0.9.12 loaded (DR hook: %s, absorb hook: %s)",
+            console->Print("MRO native v0.10.0 loaded (DR hook: %s, absorb hook: %s)",
                            g_drHookLive ? "ACTIVE" : "off",
                            g_absorbHookLive ? "ACTIVE" : "off");
         }
@@ -853,7 +748,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
 
     const auto gameVersion = REL::Module::get().version();
-    spdlog::info("MRO native v0.9.12 loading; runtime {}", gameVersion.string());
+    spdlog::info("MRO native v0.10.0 loading; runtime {}", gameVersion.string());
     if (gameVersion != REL::Version(1, 6, 1170, 0)) {
         spdlog::warn("Untested runtime {} (built against 1.6.1170)", gameVersion.string());
     }

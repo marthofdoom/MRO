@@ -28,9 +28,27 @@ deleted or overwritten.
   the native path; slider removed from Tuning.
 - MCM sections for the above (Quality of Life, Baked Into ESP / Vendor Gold,
   Carry Weight live-status row) and the FOMOD "Quality of Life Features" page.
-- **PENDING BEFORE RELEASE: vendor gold doubling still happens in MRO.dll** —
-  the FOMOD/MCM no longer mention it, so the native pass (DLL-required cut,
-  diagnostics strip, vendor-gold removal) MUST land before v0.10.0 is cut.
+- **Vendor gold doubling removed from MRO.dll** (native pass; the UI stopped
+  mentioning it in the same release).
+- **MRO.dll is now REQUIRED.** The Papyrus no-DLL fallback is deleted: the
+  legacy 30s heartbeat branch, the per-hit Papyrus weapon-XP grant, the
+  GrantCombatArmorXP combat tick, and the long-dead DrainNative* bucket
+  drains (unreferenced since v0.9.11). MRO.ini =0 now disables a hook's
+  system outright instead of falling back.
+- DLL diagnostic logging stripped (per-hit credit/weapon-XP lines, DR-AR
+  itemization) — MRO.log is quiet in normal play again.
+
+### Fixed
+- **Level-up sound (attempt #4, root cause understood).** Every positional
+  BSSoundHandle variant (plain 2D, SetPosition at the player, v0.9.12's
+  SetObjectToFollow) returned play=true yet was inaudible — the descriptor's
+  output model needs the game's interface-sound route. The DLL now calls the
+  engine's own UI PlaySound with "UISkillIncreaseSD" (SNDR 0x3C7CF EDID
+  verified against Skyrim.esm; AL ID 52054/52941 validated against
+  versionlib-1-6-1170). Needs an ear-test to confirm.
+
+### Notes
+- DLL banner synced to v0.10.0 this build (was v0.9.12).
 
 ## v0.9.13 — 2026-07-09 (alpha)
 
