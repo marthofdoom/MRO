@@ -19,6 +19,13 @@ deleted or overwritten.
   learned — so a new master spell flips without opening the magic menu.
   (The precise SpellsLearned engine event is a known AE crash vector; the
   menu triggers are the safe equivalent.)
+- **Active Effects page reflects DR and Absorb accurately (status-page 1.0
+  work, part 2).** A new "Resurgence - Physical Damage Reduction" row shows
+  your effective DR percent (earned AR, past-cap ladder included), and the
+  "Resurgence - Elemental Absorb" row now shows the strongest element's
+  current absorb percent — both magnitudes kept live by the DLL on load and
+  menu open, with descriptions that say what actually counts. The DR row
+  follows the Physical DR toggle.
 
 ### Changed
 - **FOMOD retired.** One flat package: after the v0.10.0 scope cuts the

@@ -80,7 +80,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 8 AutoReadOnly
+Int Property SCRIPT_VERSION = 9 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -411,6 +411,19 @@ Function RefreshAbilities()
     Else
         If PlayerRef.HasSpell(MRO_AbsorbAbility)
             PlayerRef.RemoveSpell(MRO_AbsorbAbility)
+        EndIf
+    EndIf
+    ; Display-only Active Effects row for physical DR (v9): the DLL keeps its
+    ; magnitude equal to the effective DR percent. Player only; follows the
+    ; past-cap DR toggle. Looked up by FormID (v0.9.3 precedent, no VMAD).
+    Spell drStatus = Game.GetFormFromFile(0x84C, "MRO.esp") as Spell
+    If drStatus
+        If FeatureEnabled(MRO_F_ArmorCap)
+            If !PlayerRef.HasSpell(drStatus)
+                PlayerRef.AddSpell(drStatus, false)
+            EndIf
+        ElseIf PlayerRef.HasSpell(drStatus)
+            PlayerRef.RemoveSpell(drStatus)
         EndIf
     EndIf
 EndFunction

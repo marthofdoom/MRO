@@ -164,7 +164,7 @@ Event OnOptionSelect(Int a_option)
         Bool newVal = !FEnabled(MRO_F_ArmorCap)
         MRO_F_ArmorCap.SetValue(newVal as Float)
         SetToggleOptionValue(_oidArmorCap, newVal)
-        NudgeQuest(true, false)
+        NudgeQuest(true, true)   ; abilities too: the DR status row follows this toggle
 
     ElseIf a_option == _oidAbsorb
         Bool newVal = !FEnabled(MRO_F_Absorb)

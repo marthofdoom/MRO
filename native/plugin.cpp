@@ -32,6 +32,9 @@ constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked norm
 constexpr std::uint32_t kFidEffAR = 0x849;          // DLL->Papyrus: player's EARNED armor rating (cast-spell AR itemized out)
 constexpr std::uint32_t kFidEffDR = 0x84A;          // DLL->Papyrus: player's effective physical DR % (native ladder truth)
 constexpr std::uint32_t kFidArmorCapEna = 0x805;    // MRO_F_ArmorCap: MCM toggle for past-cap DR
+constexpr std::uint32_t kFidAbsorbEna = 0x806;      // MRO_F_Absorb: MCM toggle for elemental absorb
+constexpr std::uint32_t kFidDRStatusMgef = 0x84B;   // display-only MGEF: Active Effects row for physical DR
+constexpr std::uint32_t kFidAbsorbMgef = 0x800;     // absorb MGEF: magnitude shows strongest-element absorb %
 
 // Mastery XP is now applied natively (v0.9.11): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
@@ -266,7 +269,11 @@ public:
                                   a_event->menuName == RE::BookMenu::MENU_NAME)) {
             Apply();
         }
-        if (a_event->opening && a_event->menuName == RE::JournalMenu::MENU_NAME) {
+        // Journal open feeds the MCM Live Status; MagicMenu open feeds the
+        // Active Effects rows (the effects tab is built after the menu opens,
+        // so the queued task lands first).
+        if (a_event->opening && (a_event->menuName == RE::JournalMenu::MENU_NAME ||
+                                 a_event->menuName == RE::MagicMenu::MENU_NAME)) {
             SKSE::GetTaskInterface()->AddTask([]() { PhysicalDR::PublishPlayerStatus(); });
         }
         return RE::BSEventNotifyControl::kContinue;
@@ -653,6 +660,54 @@ void PublishPlayerStatus() {
         }
     }
     g_effDR->value = dr;
+
+    // Keep the Active Effects rows honest: the DR status effect's magnitude
+    // becomes the effective DR percent, and the absorb effect's magnitude
+    // becomes the strongest element's current absorb percent. The magic
+    // menu's effects page reads live magnitudes, so these rows now reflect
+    // the native truth instead of static record values.
+    float absorbPct = 0.0f;
+    if (auto* dh2 = RE::TESDataHandler::GetSingleton()) {
+        auto* absorbEna = dh2->LookupForm<RE::TESGlobal>(kFidAbsorbEna, "MRO.esp");
+        if (!absorbEna || absorbEna->value != 0.0f) {
+            float fullAt = g_absorbMax ? g_absorbMax->value : 200.0f;
+            if (fullAt <= 101.0f) {
+                fullAt = 200.0f;
+            }
+            auto* avo = player->AsActorValueOwner();
+            const RE::ActorValue resists[5] = {
+                RE::ActorValue::kResistFire, RE::ActorValue::kResistFrost,
+                RE::ActorValue::kResistShock, RE::ActorValue::kResistMagic,
+                RE::ActorValue::kPoisonResist
+            };
+            for (const auto av : resists) {
+                const float r = avo->GetActorValue(av);
+                if (r > 100.0f) {
+                    float frac = (r - 100.0f) / (fullAt - 100.0f);
+                    if (frac > 1.0f) {
+                        frac = 1.0f;
+                    }
+                    absorbPct = std::max(absorbPct, frac * 100.0f);
+                }
+            }
+        }
+        auto* drMgef = dh2->LookupForm<RE::EffectSetting>(kFidDRStatusMgef, "MRO.esp");
+        auto* absMgef = dh2->LookupForm<RE::EffectSetting>(kFidAbsorbMgef, "MRO.esp");
+        if (auto* mt = player->AsMagicTarget()) {
+            if (auto* list = mt->GetActiveEffectList()) {
+                for (const auto& ae : *list) {
+                    if (!ae || !ae->effect || !ae->effect->baseEffect) {
+                        continue;
+                    }
+                    if (drMgef && ae->effect->baseEffect == drMgef) {
+                        ae->magnitude = dr;
+                    } else if (absMgef && ae->effect->baseEffect == absMgef) {
+                        ae->magnitude = absorbPct;
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Weapon-mastery XP (docs/WEAPON_XP_MODELS.md, v0.9.1 normalized model):

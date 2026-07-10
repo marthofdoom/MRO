@@ -83,7 +83,9 @@ FID_G_MAGICXPPERCOST = OWN | 0x846  # tuning: effective magicka cost per magic m
 FID_G_NATIVEARMORXP = OWN | 0x847  # bridge: DLL sets 1 when native armor-XP measuring is live (DLL->Papyrus)
 FID_X_PENDARMOR    = OWN | 0x848  # bridge: DLL banks normalized armor hits-taken (DLL->Papyrus)
 FID_X_EFFAR        = OWN | 0x849  # bridge: DLL publishes the player's EARNED armor rating (cast-spell AR itemized out; MCM display)
-FID_X_EFFDR        = OWN | 0x84A  # bridge: DLL publishes the player's effective physical DR percent (native ladder truth; MCM display)
+FID_X_EFFDR        = OWN | 0x84A  # (see line above)
+FID_DRSTATUS_MGEF  = OWN | 0x84B  # display-only: Active Effects row for physical DR (magnitude kept live by the DLL)
+FID_DRSTATUS_SPELL = OWN | 0x84C  # constant ability carrying it (player only, gated by MRO_F_ArmorCap)  # bridge: DLL publishes the player's effective physical DR percent (native ladder truth; MCM display)
 
 # Mastery LEVEL globals, one per skill in SkillIndex order (OH TH MK LA
 # HA DS RS AL CJ IL SM AC EN SP). Bound as each CSF skill's "level" in
@@ -321,10 +323,10 @@ def make_mgefs() -> bytes:
     ])
     body  = subrec('EDID', zstr("MRO_AbsorbMGEF"))
     body += subrec('VMAD', vmad.build())
-    body += subrec('FULL', zstr("MRO - Elemental Absorb"))
-    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x600))
+    body += subrec('FULL', zstr("Resurgence - Elemental Absorb"))
+    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x200))
     body += subrec('SNDD', b'')
-    body += subrec('DNAM', zstr("Marth Resurgence Overhaul: elemental resistances above 100% convert that element's damage into healing. Full absorption at the MCM-configured resistance (default 200%). Overhealing spills into stamina and magicka."))
+    body += subrec('DNAM', zstr("Resistances above 100% convert that element's damage into healing; your strongest element currently absorbs <mag>% of its damage. Full absorption at the MCM-configured resistance. Overhealing spills into stamina and magicka."))
     out.write(record('MGEF', FID_ABSORB_MGEF, 0, body))
 
     # ── CarryWeightMGEF: fortify CarryWeight, +150 ──
@@ -355,6 +357,18 @@ def make_mgefs() -> bytes:
     body += subrec('SNDD', b'')
     body += subrec('DNAM', zstr(""))
     out.write(record('MGEF', FID_EVENTS_MGEF, 0, body))
+
+    # ── DRStatusMGEF: display-only Active Effects row for physical DR ──
+    # Inert script archetype with no script attached; the DLL keeps the
+    # active effect's MAGNITUDE equal to the player's effective physical
+    # DR percent (earned AR, past-cap ladder included), so the magic
+    # menu's effects page reflects the native truth. 0x200 = No Duration.
+    body  = subrec('EDID', zstr("MRO_DRStatusMGEF"))
+    body += subrec('FULL', zstr("Resurgence - Physical Damage Reduction"))
+    body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x200))
+    body += subrec('SNDD', b'')
+    body += subrec('DNAM', zstr("Worn armor, perks, permanent effects, and armor mastery reduce physical damage taken by <mag>%. Armor from cast spells (wards, flesh spells) protects up to the engine cap but does not extend past it."))
+    out.write(record('MGEF', FID_DRSTATUS_MGEF, 0, body))
 
     return group('MGEF', out.getvalue())
 
@@ -390,12 +404,22 @@ def make_spels() -> bytes:
     # AbsorbAbility
     body  = subrec('EDID', zstr("MRO_AbsorbAbility"))
     body += subrec('OBND', bytes(12))
-    body += subrec('FULL', zstr("MRO - Elemental Absorb"))
+    body += subrec('FULL', zstr("Resurgence - Elemental Absorb"))
     body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
     body += subrec('DESC', zstr(""))
     body += subrec('SPIT', spit())
     body += spell_effect(FID_ABSORB_MGEF, 1.0)
     out.write(record('SPEL', FID_ABSORB_SPELL, 0, body))
+
+    # DRStatusAbility — display-only carrier for the DR row
+    body  = subrec('EDID', zstr("MRO_DRStatusAbility"))
+    body += subrec('OBND', bytes(12))
+    body += subrec('FULL', zstr("Resurgence - Physical Damage Reduction"))
+    body += subrec('ETYP', struct.pack('<I', FREF_ETYP_EITHERHAND))
+    body += subrec('DESC', zstr(""))
+    body += subrec('SPIT', spit())
+    body += spell_effect(FID_DRSTATUS_MGEF, 0.0)
+    out.write(record('SPEL', FID_DRSTATUS_SPELL, 0, body))
 
     # CarryWeightAbility
     body  = subrec('EDID', zstr("MRO_CarryWeightAbility"))
@@ -829,8 +853,8 @@ def main():
     print(f"  FLST  x1      (MRO_DRPerkList: 24 DR perks)")
     print(f"  PERK  x24     (physical DR ladder 76-99%, Mod Incoming Damage)")
     print(f"  (vendor gold now doubled at runtime by MRO.dll — no LVLI records)")
-    print(f"  MGEF  x2      (AbsorbMGEF with script, CarryWeightMGEF value modifier)")
-    print(f"  SPEL  x2      (AbsorbAbility, CarryWeightAbility)")
+    print(f"  MGEF  x4      (Absorb, CarryWeight [legacy], Events, DRStatus display)")
+    print(f"  SPEL  x3      (AbsorbAbility, CarryWeightAbility [legacy], DRStatusAbility)")
     print(f"  QUST  x2      (MRO_StartupQuest, MRO_MCMQuest)")
     print()
     print("All script properties wired. Copy MRO.esp to your MO2 mod folder.")
