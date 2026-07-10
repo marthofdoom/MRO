@@ -29,7 +29,6 @@ for s in "${scripts[@]}"; do
     out=$(WINEDATADIR="$MONO_DATA" "$PROTON" "$PAPYRUS" "Source/Scripts/$s.psc" \
         -f="$FLAGS" -i="$IMPORTS" -o="MRO-nofomod/Scripts" 2>&1) || true
     if grep -q "1 succeeded, 0 failed" <<<"$out"; then
-        cp "MRO-nofomod/Scripts/$s.pex" "MRO-flat/Scripts/"
         echo "OK   $s"
     else
         echo "FAIL $s"

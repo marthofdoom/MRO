@@ -1,7 +1,0 @@
-{
-    "id": "MRO_Mastery_Restoration",
-    "name": "Restoration Mastery",
-    "description": "Mastery earned through sustained healing and ward use beyond conventional limits. Unlocks after reaching 100 in Restoration.",
-    "ratio": "MRO.esp|0x866",
-    "level": "MRO.esp|0x856"
-}

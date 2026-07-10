@@ -6,6 +6,11 @@
 #
 # Release folders are never overwritten — bump VERSION for every new build
 # you want to keep. Old versions are never deleted.
+#
+# Packaging (FOMOD retired in v0.12): ONE flat main package built from
+# MRO-nofomod/ (everything MCM-managed at runtime), plus a separate optional
+# zip for the rebalanced Experience.ini so a plain install can never clobber
+# a user's Experience settings.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -30,22 +35,17 @@ fi
 # Stamp version into the MCM and recompile all scripts
 sed -i "s/MRO_VERSION = \"[^\"]*\"/MRO_VERSION = \"${VER}\"/" Source/Scripts/MRO_MCM.psc
 sed -i "s/Marth Resurgence Overhaul v[0-9.]*/Marth Resurgence Overhaul v${VER}/" MRO_GenerateESP.py
-# Stamp the FOMOD version so info.xml never drifts from the release
-sed -i "s#<Version>[0-9.]*</Version>#<Version>${VER}</Version>#" MRO-flat/fomod/info.xml
 tools/compile.sh all
 
-# Regenerate ESP + SEQ into both package trees
+# Regenerate ESP + SEQ into the package tree
 python3 MRO_GenerateESP.py MRO-nofomod/
-cp MRO-nofomod/MRO.esp MRO-flat/
-mkdir -p MRO-flat/SEQ
-cp MRO-nofomod/SEQ/MRO.seq MRO-flat/SEQ/
 
-rm -f "MRO-test-nofomod.zip" "MRO-v${VER}.zip"
-(cd MRO-nofomod && zip -rq "../MRO-test-nofomod.zip" .)
-(cd MRO-flat    && zip -rq "../MRO-v${VER}.zip" .)
+rm -f "MRO-v${VER}.zip" "MRO-ExperienceINI-v${VER}.zip"
+(cd MRO-nofomod && zip -rq "../MRO-v${VER}.zip" .)
+(cd Optional    && zip -q "../MRO-ExperienceINI-v${VER}.zip" Experience.ini)
 
 mkdir -p "$DEST"
-cp "MRO-v${VER}.zip" "MRO-test-nofomod.zip" "$DEST/"
+cp "MRO-v${VER}.zip" "MRO-ExperienceINI-v${VER}.zip" "$DEST/"
 
 # Tag if this is a git repo with a clean-enough state
 if git rev-parse --git-dir >/dev/null 2>&1; then

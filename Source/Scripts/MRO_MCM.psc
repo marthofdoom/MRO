@@ -534,7 +534,20 @@ Function RenderFeatures()
         EndIf
     EndIf
     AddTextOption("Worn Chest / Mastery", chest + " / " + (mfrac as Int) + "%")
-    AddTextOption("Armor Rating", (player.GetActorValue("DamageResist") as Int) as String)
+    ; The DLL publishes the ladder's TRUE inputs on every journal open:
+    ; earned AR (cast-spell AR like wards itemized out) and the effective DR
+    ; the native path actually applies. The old Papyrus re-derivation read
+    ; FULL AR, so a ward looked like it added past-cap DR when it didn't.
+    Float arShow = player.GetActorValue("DamageResist")
+    GlobalVariable effAR = Game.GetFormFromFile(0x849, "MRO.esp") as GlobalVariable
+    GlobalVariable effDR = Game.GetFormFromFile(0x84A, "MRO.esp") as GlobalVariable
+    If effAR && effAR.GetValue() > 0.0
+        arShow = effAR.GetValue()
+    EndIf
+    If effDR && effDR.GetValue() > 0.0
+        dr = effDR.GetValue()
+    EndIf
+    AddTextOption("Armor Rating (earned)", (arShow as Int) as String)
     AddTextOption("Physical DR",  ((dr as Int) as String) + "%")
     String absorbState = "Off"
     If FEnabled(MRO_F_Absorb) && q.MRO_AbsorbAbility && player.HasSpell(q.MRO_AbsorbAbility)

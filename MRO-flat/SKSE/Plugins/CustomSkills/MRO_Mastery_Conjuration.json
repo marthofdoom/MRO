@@ -1,7 +1,0 @@
-{
-    "id": "MRO_Mastery_Conjuration",
-    "name": "Conjuration Mastery",
-    "description": "Mastery earned through sustained conjuration magic beyond conventional limits. Unlocks after reaching 100 in Conjuration.",
-    "ratio": "MRO.esp|0x868",
-    "level": "MRO.esp|0x858"
-}

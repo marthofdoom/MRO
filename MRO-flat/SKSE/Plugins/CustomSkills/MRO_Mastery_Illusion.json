@@ -1,7 +1,0 @@
-{
-    "id": "MRO_Mastery_Illusion",
-    "name": "Illusion Mastery",
-    "description": "Mastery earned through continual use of illusion magic beyond conventional limits. Unlocks after reaching 100 in Illusion.",
-    "ratio": "MRO.esp|0x869",
-    "level": "MRO.esp|0x859"
-}

@@ -73,11 +73,15 @@ reduction.
 
 ## Install
 
-Install the package with your mod manager (FOMOD in `MRO-flat/`, or the flat
-`MRO-nofomod/`), letting `MRO.esp` load late. It is ESL-flagged. **The bundled
-`MRO.dll` is required** — mastery XP is credited natively per hit. Hook
-behaviour is controlled by `SKSE/Plugins/MRO.ini`; the hooks self-verify the
-game binary and stand down safely if it differs (see `MRO.log`).
+Install the flat package with your mod manager, letting `MRO.esp` load late.
+It is ESL-flagged. There is no FOMOD — every choice is a runtime MCM toggle.
+**The bundled `MRO.dll` is required** — mastery XP is credited natively per
+hit. Hook behaviour is controlled by `SKSE/Plugins/MRO.ini`; the hooks
+self-verify the game binary and stand down safely if it differs (see
+`MRO.log`).
+
+The rebalanced `Experience.ini` (for the Experience mod) ships as a separate
+optional download so a plain install never overwrites your XP settings.
 
 Upgrades are save-safe within a major line: settings persist and the scripts
 migrate themselves in place on load.
@@ -111,8 +115,8 @@ MRO is pre-1.0 and under active development. Current directions:
 MRO_GenerateESP.py   generates MRO.esp + SEQ (never hand-edited)
 Source/Scripts/      Papyrus sources (+ compile-only stubs)
 native/              CommonLibSSE-NG SKSE plugin (CI-built)
-MRO-flat/            FOMOD install package
-MRO-nofomod/         flat install package
+MRO-nofomod/         the flat install package (name is historical)
+Optional/            Experience.ini — packaged as a separate optional zip
 tools/               compile.sh / dump_record.py / audit_esp.py
 docs/                START AT docs/INDEX.md
 releases/vX.Y.Z/     immutable release archive (never deleted)

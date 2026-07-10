@@ -29,6 +29,9 @@ constexpr std::uint32_t kFidPendTH = 0x81E;         // DLL->Papyrus: banked cred
 constexpr std::uint32_t kFidPendMK = 0x81F;         // DLL->Papyrus: banked credited Archery damage
 constexpr std::uint32_t kFidNativeArmorXP = 0x847;  // DLL->Papyrus: 1 when armor-XP measuring is live
 constexpr std::uint32_t kFidPendArmor = 0x848;      // DLL->Papyrus: banked normalized armor hits-taken
+constexpr std::uint32_t kFidEffAR = 0x849;          // DLL->Papyrus: player's EARNED armor rating (cast-spell AR itemized out)
+constexpr std::uint32_t kFidEffDR = 0x84A;          // DLL->Papyrus: player's effective physical DR % (native ladder truth)
+constexpr std::uint32_t kFidArmorCapEna = 0x805;    // MRO_F_ArmorCap: MCM toggle for past-cap DR
 
 // Mastery XP is now applied natively (v0.9.11): the DLL reads the same knobs the
 // MCM writes and owns the curve + level-ups for weapon/armor skills, so the
@@ -63,6 +66,9 @@ RE::TESGlobal* g_pendTH = nullptr;
 RE::TESGlobal* g_pendMK = nullptr;
 RE::TESGlobal* g_nativeArmorXP = nullptr;
 RE::TESGlobal* g_pendArmor = nullptr;
+RE::TESGlobal* g_effAR = nullptr;
+RE::TESGlobal* g_effDR = nullptr;
+RE::TESGlobal* g_armorCapEna = nullptr;
 
 RE::TESGlobal* g_masteryEna = nullptr;
 RE::TESGlobal* g_masteryGnt = nullptr;
@@ -146,6 +152,10 @@ void ReadIni() {
     }
     spdlog::info("MRO.ini: bPhysicalDRHook={} bAbsorbHook={}",
                  g_drHookWanted ? 1 : 0, g_absorbHookWanted ? 1 : 0);
+}
+
+namespace PhysicalDR {
+void PublishPlayerStatus();  // defined below; called from the menu sink
 }
 
 // ── Magic capstones: master spells one-handed at 50, dual-cast at 100 ──
@@ -238,13 +248,26 @@ void Apply() {
 }
 
 // Catches master spells learned since the last pass (tome read, console)
-// without polling: re-evaluate whenever the magic menu closes.
+// without polling: re-evaluate whenever the magic menu closes. Also refreshes
+// the DR status globals when the journal opens, so by the time the user
+// reaches the MCM the Live Status rows hold the native ladder's truth.
 class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 public:
     RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
                                           RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-        if (a_event && !a_event->opening && a_event->menuName == RE::MagicMenu::MENU_NAME) {
+        if (!a_event) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+        // Book Menu close = the moment a spell tome is learned; MagicMenu close
+        // is belt-and-suspenders. (The precise engine event, SpellsLearned, is a
+        // known CRASH vector on AE when spells come from Papyrus AddSpell — po3
+        // compiles it out on AE — so menus + load + level-up are the triggers.)
+        if (!a_event->opening && (a_event->menuName == RE::MagicMenu::MENU_NAME ||
+                                  a_event->menuName == RE::BookMenu::MENU_NAME)) {
             Apply();
+        }
+        if (a_event->opening && a_event->menuName == RE::JournalMenu::MENU_NAME) {
+            SKSE::GetTaskInterface()->AddTask([]() { PhysicalDR::PublishPlayerStatus(); });
         }
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -509,6 +532,12 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     if (!a_victim || !g_laFrac || !g_haFrac || !g_dr99) {
         return;
     }
+    // Honor the MCM "Physical DR Past 75%" toggle (null global = default ON).
+    // The hook itself is INI-gated, but the runtime toggle was never checked
+    // here — the MCM switch was decorative on the native path until v0.12.
+    if (g_armorCapEna && g_armorCapEna->value == 0.0f) {
+        return;
+    }
     const bool isPlayer = a_victim->IsPlayerRef();
     if (!isPlayer && !a_victim->IsPlayerTeammate()) {
         return;
@@ -567,6 +596,63 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     }
     const float k = (100.0f - ours) / (100.0f - engineDR);
     a_hitData.totalDamage *= k;
+}
+
+// Publish the player's EARNED armor rating and effective physical DR to the
+// display bridge globals (0x849/0x84A). The MCM Live Status reads these
+// instead of re-deriving the ladder in Papyrus from FULL AR — the old readout
+// showed a ward adding past-cap DR even though the mitigation path had
+// itemized it out (field report 2026-07-10: 90% displayed warded vs 81%
+// unwarded). Mirrors Adjust's math exactly; refreshed on load and every
+// journal open (main thread via the SKSE task queue).
+void PublishPlayerStatus() {
+    if (!g_effAR || !g_effDR) {
+        return;
+    }
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) {
+        return;
+    }
+    const float arFull = player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kDamageResist);
+    const float ar = arFull - CastSpellArmor(player);
+    g_effAR->value = ar;
+
+    auto* gs = RE::GameSettingCollection::GetSingleton();
+    const auto* capSetting = gs ? gs->GetSetting("fMaxArmorRating") : nullptr;
+    const auto* scaleSetting = gs ? gs->GetSetting("fArmorScalingFactor") : nullptr;
+    if (!capSetting || !scaleSetting) {
+        return;
+    }
+    const float cap = capSetting->data.f;
+    const float scale = scaleSetting->data.f;
+    if (scale <= 0.0f || cap <= 0.0f || cap >= 100.0f) {
+        return;
+    }
+    // Baseline: what the engine grants from full AR (wards keep this).
+    float dr = std::min(arFull * scale, cap);
+    // Past-cap ladder from EARNED AR only, same gates as Adjust.
+    const bool toggleOn = !g_armorCapEna || g_armorCapEna->value != 0.0f;
+    if (toggleOn && g_drHookLive && g_laFrac && g_haFrac && g_dr99) {
+        float frac = 0.0f;
+        const auto* chest = player->GetWornArmor(RE::BGSBipedObjectForm::BipedObjectSlot::kBody);
+        if (chest && chest->IsLightArmor()) {
+            frac = g_laFrac->value / 100.0f;
+        } else if (chest && chest->IsHeavyArmor()) {
+            frac = g_haFrac->value / 100.0f;
+        }
+        const float kink = cap / scale;
+        if (frac > 0.0f && ar > kink) {
+            float target = g_dr99->value;
+            if (target <= kink + 100.0f) {
+                target = kink + 100.0f;
+            }
+            float ours = cap + (ar - kink) * (99.0f - cap) / (target - kink);
+            const float ceiling = cap + (99.0f - cap) * frac;
+            ours = std::min(ours, std::min(ceiling, 99.0f));
+            dr = std::max(dr, ours);
+        }
+    }
+    g_effDR->value = dr;
 }
 
 // Weapon-mastery XP (docs/WEAPON_XP_MODELS.md, v0.9.1 normalized model):
@@ -900,6 +986,9 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_pendMK = dh->LookupForm<RE::TESGlobal>(kFidPendMK, "MRO.esp");
             g_nativeArmorXP = dh->LookupForm<RE::TESGlobal>(kFidNativeArmorXP, "MRO.esp");
             g_pendArmor = dh->LookupForm<RE::TESGlobal>(kFidPendArmor, "MRO.esp");
+            g_effAR = dh->LookupForm<RE::TESGlobal>(kFidEffAR, "MRO.esp");
+            g_effDR = dh->LookupForm<RE::TESGlobal>(kFidEffDR, "MRO.esp");
+            g_armorCapEna = dh->LookupForm<RE::TESGlobal>(kFidArmorCapEna, "MRO.esp");
 
             g_masteryEna = dh->LookupForm<RE::TESGlobal>(kFidMasteryEna, "MRO.esp");
             g_masteryGnt = dh->LookupForm<RE::TESGlobal>(kFidMasteryGnt, "MRO.esp");
@@ -955,6 +1044,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         // BothHands and the capstones must re-assert against the restored
         // mastery globals.
         Capstones::Apply();
+        SKSE::GetTaskInterface()->AddTask([]() { PhysicalDR::PublishPlayerStatus(); });
         break;
     default:
         break;

@@ -7,7 +7,30 @@ deleted or overwritten.
 
 ## Unreleased
 
+### Added
+- **Live Status tells the truth (status-page 1.0 work, part 1).** The DLL
+  now publishes the player's EARNED armor rating and the effective physical
+  DR the native ladder actually applies (bridge globals 0x849/0x84A,
+  refreshed on load and every journal open). The MCM's "Armor Rating
+  (earned)" and "Physical DR" rows read those instead of re-deriving the
+  ladder from full AR — which is why a ward looked like +9% past-cap DR in
+  testing even though the mitigation path had itemized it out.
+- Capstones also re-check when a book closes — the moment a spell tome is
+  learned — so a new master spell flips without opening the magic menu.
+  (The precise SpellsLearned engine event is a known AE crash vector; the
+  menu triggers are the safe equivalent.)
+
+### Changed
+- **FOMOD retired.** One flat package: after the v0.10.0 scope cuts the
+  installer was three info-only pages and a single file choice; every real
+  decision is a runtime MCM toggle. The rebalanced Experience.ini now ships
+  as a separate optional zip, so a plain install can never overwrite your
+  Experience settings (the old flat package force-installed it).
+
 ### Fixed
+- **The MCM "Physical DR Past 75%" toggle now actually gates the native
+  hook.** The DLL never read MRO_F_ArmorCap — the switch was decorative on
+  the native path since the hook shipped.
 - **Past-cap DR now gates on EARNED armor only (1.0 gate item).** The DR
   ladder itemizes the victim's active effects and excludes armor rating
   granted by actively cast spells (wards, flesh spells) — worn armor,

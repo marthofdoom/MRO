@@ -82,6 +82,8 @@ FID_SP_FLST        = OWN | 0x845  # FormList holding the 5 barter perks in order
 FID_G_MAGICXPPERCOST = OWN | 0x846  # tuning: effective magicka cost per magic mastery-XP "action" (default 150, higher = slower); cost-weighted spell XP
 FID_G_NATIVEARMORXP = OWN | 0x847  # bridge: DLL sets 1 when native armor-XP measuring is live (DLL->Papyrus)
 FID_X_PENDARMOR    = OWN | 0x848  # bridge: DLL banks normalized armor hits-taken (DLL->Papyrus)
+FID_X_EFFAR        = OWN | 0x849  # bridge: DLL publishes the player's EARNED armor rating (cast-spell AR itemized out; MCM display)
+FID_X_EFFDR        = OWN | 0x84A  # bridge: DLL publishes the player's effective physical DR percent (native ladder truth; MCM display)
 
 # Mastery LEVEL globals, one per skill in SkillIndex order (OH TH MK LA
 # HA DS RS AL CJ IL SM AC EN SP). Bound as each CSF skill's "level" in
@@ -243,6 +245,8 @@ GLOBALS = [
     ("MRO_X_PendMK",       FID_X_PENDMK,      'f', 0.0),
     ("MRO_G_NativeArmorXP", FID_G_NATIVEARMORXP, 'f', 0.0),
     ("MRO_X_PendArmor",    FID_X_PENDARMOR,   'f', 0.0),
+    ("MRO_X_EffectiveAR",  FID_X_EFFAR,       'f', 0.0),
+    ("MRO_X_EffectiveDR",  FID_X_EFFDR,       'f', 0.0),
 ]
 # Mastery level + ratio globals (see FID_ML_BASE comment)
 for _i, _sk in enumerate(MASTERY_SKILLS):

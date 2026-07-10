@@ -1,7 +1,0 @@
-{
-    "id": "MRO_Mastery_HeavyArmor",
-    "name": "Heavy Armor Mastery",
-    "description": "Mastery earned by enduring attacks while wearing heavy armor beyond conventional skill. Unlocks after reaching 100 in Heavy Armor.",
-    "ratio": "MRO.esp|0x864",
-    "level": "MRO.esp|0x854"
-}

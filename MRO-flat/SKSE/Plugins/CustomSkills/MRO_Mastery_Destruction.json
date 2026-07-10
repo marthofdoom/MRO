@@ -1,7 +1,0 @@
-{
-    "id": "MRO_Mastery_Destruction",
-    "name": "Destruction Mastery",
-    "description": "Mastery earned through relentless use of destruction magic beyond conventional limits. Unlocks after reaching 100 in Destruction.",
-    "ratio": "MRO.esp|0x865",
-    "level": "MRO.esp|0x855"
-}
