@@ -167,18 +167,43 @@ void SendModEvent(const char* a_name, float a_num) {
 // Sound.Play sits in a 2D dead spot and never fired; BSAudioManager plays it
 // reliably regardless of menu state. Routed through a mod-event sink so every
 // level-up (native OR Papyrus-side magic/craft/speech) uses the same path.
+using UiPlaySoundFn = void (*)(const char*);
+
+// SEH-guarded raw call, isolated in its own function because __try cannot
+// share a frame with C++ unwinding. If the callee faults, we contain it and
+// report failure instead of taking down the game (or depending on a
+// third-party VEH to catch it, as happened 2026-07-09).
+bool SehUiPlaySound(UiPlaySoundFn a_fn, const char* a_edid) {
+    __try {
+        a_fn(a_edid);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void PlayLevelUpSound() {
     // Route through the game's own interface-sound function (the one menu
     // clicks use), resolving the descriptor by EDITOR ID. Every BSSoundHandle
     // variant — plain 2D, SetPosition at the player, SetObjectToFollow — returned
     // play=true yet stayed inaudible in the field (2026-07-09): this descriptor's
     // output model needs the UI route, not a spatialized handle.
-    // "UISkillIncreaseSD" = SNDR 0x3C7CF EDID, verified against Skyrim.esm;
-    // AL ID pair validated against versionlib-1-6-1170 (52941 -> 0x97adb0).
-    using func_t = void(const char*);
-    static REL::Relocation<func_t> uiPlaySound{ RELOCATION_ID(52054, 52941) };
-    uiPlaySound("UISkillIncreaseSD");
-    spdlog::info("level-up sound: UI PlaySound(UISkillIncreaseSD)");
+    //
+    // It must run on the MAIN thread: calling it straight from the mod-event
+    // sink thread read-AV'd inside a callee (ID 20166+0x9, 2026-07-09) — only a
+    // third-party VEH recovery kept the game alive. Defer via the SKSE task
+    // queue (runs in the main game loop), and keep the SEH guard so a residual
+    // fault degrades to "no sound" + a log line, never a CTD.
+    // "UISkillIncreaseSD" = SNDR 0x3C7CF EDID, verified against Skyrim.esm.
+    SKSE::GetTaskInterface()->AddTask([]() {
+        static REL::Relocation<UiPlaySoundFn> uiPlaySound{ RELOCATION_ID(52054, 52941) };
+        const bool ok = SehUiPlaySound(uiPlaySound.get(), "UISkillIncreaseSD");
+        if (ok) {
+            spdlog::info("level-up sound: UI PlaySound(UISkillIncreaseSD) ok (main thread)");
+        } else {
+            spdlog::warn("level-up sound: UI PlaySound faulted even on the main thread — SEH-contained; mechanism is wrong, revert it");
+        }
+    });
 }
 
 class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {

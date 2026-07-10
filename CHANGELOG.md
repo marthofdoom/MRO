@@ -39,13 +39,16 @@ deleted or overwritten.
   itemization) — MRO.log is quiet in normal play again.
 
 ### Fixed
-- **Level-up sound (attempt #4, root cause understood).** Every positional
-  BSSoundHandle variant (plain 2D, SetPosition at the player, v0.9.12's
-  SetObjectToFollow) returned play=true yet was inaudible — the descriptor's
-  output model needs the game's interface-sound route. The DLL now calls the
-  engine's own UI PlaySound with "UISkillIncreaseSD" (SNDR 0x3C7CF EDID
-  verified against Skyrim.esm; AL ID 52054/52941 validated against
-  versionlib-1-6-1170). Needs an ear-test to confirm.
+- **Level-up sound (attempt #5).** Every positional BSSoundHandle variant
+  (plain 2D, SetPosition at the player, v0.9.12's SetObjectToFollow)
+  returned play=true yet was inaudible — the descriptor's output model
+  needs the game's interface-sound route ("UISkillIncreaseSD", SNDR
+  0x3C7CF EDID verified against Skyrim.esm; AL ID 52054/52941). Attempt #4
+  called it straight from the mod-event sink thread and read-AV'd inside a
+  callee (only SkyrimCrashGuard's VEH recovery prevented a CTD at
+  level-up). Now deferred to the main thread via the SKSE task queue AND
+  SEH-guarded, so worst case degrades to "no sound + warn line", never a
+  crash. Needs an ear-test to confirm.
 
 ### Notes
 - DLL banner synced to v0.10.0 this build (was v0.9.12).
