@@ -5,7 +5,7 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## Unreleased
+## v0.11.0 — 2026-07-10 (alpha)
 
 ### Added
 - **Magic capstones (1.0 gate feature).** Per school: at mastery 50 that
