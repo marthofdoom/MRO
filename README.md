@@ -92,6 +92,9 @@ MRO is pre-1.0 and under active development. Current directions:
 - **Sharper DR inputs** (also gating 1.0) — the past-cap DR ladder will read
   worn armor, perks, and permanent effects while excluding actively cast
   spells like wards and flesh spells.
+- **Proper status info for DR and absorb** (also gating 1.0) — the in-game
+  magic/status pages presenting your real past-cap DR and per-element absorb
+  clearly, not just the MCM panel.
 - **Broaden beyond Requiem.** Detect the load order's balance style and
   auto-tune growth rates and targets so MRO fits more setups, not just
   Requiem/LoreRim — the direction behind the new name.
