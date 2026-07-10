@@ -51,6 +51,7 @@ constexpr const char* kEvtLevelUp = "MRO_MasteryLevelUp";     // DLL->Papyrus: s
 constexpr const char* kEvtGameLoaded = "MRO_GameLoaded";      // DLL->Papyrus: reconcile bonuses
 constexpr const char* kEvtBanner = "MRO_MasteryBanner";       // Papyrus->DLL: show skill-up banner + chime
                                                               // strArg = display name, numArg = idx*1000 + level
+constexpr const char* kEvtPlayerCast = "MRO_PlayerSpellCast"; // DLL->Papyrus: player cast a spell (sender = the spell)
 
 bool g_drHookWanted = true;     // default ON; MRO.ini bPhysicalDRHook=0 forces off
 bool g_drHookLive = false;      // site verified + thunk installed
@@ -350,6 +351,32 @@ void ShowLevelUpBanner(std::string a_name, int a_level, float a_endPct) {
         }
     });
 }
+
+// Native replacement for Papyrus RegisterForActorAction(2): the engine's
+// spell-cast event fires for every caster in the load order, but sinking it
+// HERE costs nanoseconds per event — the Papyrus VM is only dispatched for
+// the player's own casts (magic mastery XP). Same de-globalization the
+// weapon-swing watch got in v0.9.8.
+class CastSink : public RE::BSTEventSink<RE::TESSpellCastEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const RE::TESSpellCastEvent* a_event,
+                                          RE::BSTEventSource<RE::TESSpellCastEvent>*) override {
+        if (a_event && a_event->object && a_event->object->IsPlayerRef()) {
+            if (auto* spell = RE::TESForm::LookupByID(a_event->spell)) {
+                if (auto* src = SKSE::GetModCallbackEventSource()) {
+                    SKSE::ModCallbackEvent ev{ RE::BSFixedString(kEvtPlayerCast),
+                                               RE::BSFixedString(""), 0.0f, spell };
+                    src->SendEvent(&ev);
+                }
+            }
+        }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+    static CastSink* GetSingleton() {
+        static CastSink instance;
+        return &instance;
+    }
+};
 
 class BannerSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
 public:
@@ -1067,6 +1094,11 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (auto* ui = RE::UI::GetSingleton()) {
             ui->AddEventSink(Capstones::MenuSink::GetSingleton());
             spdlog::info("Capstone MenuSink registered (MagicMenu close)");
+        }
+        // Player spell casts -> Papyrus magic XP, filtered natively.
+        if (auto* holder = RE::ScriptEventSourceHolder::GetSingleton()) {
+            holder->AddEventSink<RE::TESSpellCastEvent>(MasteryXP::CastSink::GetSingleton());
+            spdlog::info("CastSink registered (native spell-cast filter)");
         }
         // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
         // they are live exactly when the DR hook is.

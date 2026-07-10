@@ -80,7 +80,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 9 AutoReadOnly
+Int Property SCRIPT_VERSION = 10 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -127,13 +127,14 @@ Function RegisterMasteryEvents()
     ; loads; OnInit also reconciles directly to cover the first game start.
     RegisterForModEvent("MRO_MasteryLevelUp", "OnNativeMasteryLevelUp")
     RegisterForModEvent("MRO_GameLoaded", "OnNativeGameLoaded")
+    RegisterForModEvent("MRO_PlayerSpellCast", "OnNativePlayerSpellCast")
     ; PERF: action 0 (weapon swing) was a GLOBAL all-actors event and the biggest
     ; Papyrus tax in big fights. Explicitly unregister it (saves that ran an older
     ; MRO still hold the registration, so dropping the call is not enough), and
     ; refresh the weapon bonus off the player's own hits instead (HandleWeaponHit).
     UnregisterForActorAction(0)
+    UnregisterForActorAction(2)   ; v10: spell casts now come from the DLL's native sink
     If MasteryEnabled()
-        RegisterForActorAction(2)   ; spell fire: magic school XP (rare vs swings)
         RegisterForMenu("Crafting Menu")
         RegisterForMenu("BarterMenu")
         RegisterForMenu("InventoryMenu")   ; chest swap: refresh armor bonus
@@ -584,19 +585,19 @@ EndFunction
 ; heavy tax; the equipped-weapon bonus now refreshes on the PLAYER's own hits
 ; (HandleWeaponHit, player-scoped via the AME) + inventory close. Only action 2
 ; (spell fire) remains, and it is far rarer than swings.
-Event OnActorAction(Int actionType, Actor akActor, Form akSource, Int slot)
-    If akActor != PlayerRef
-        Return
-    EndIf
-    If actionType == 2
-        ; Per-school combat gating lives in GrantSpellMasteryXP:
-        ; Illusion and Alteration train out of combat (utility schools
-        ; cast mostly outside a fight); the rest require combat so
-        ; casting at walls trains nothing.
-        Spell sp = akSource as Spell
-        If sp
-            GrantSpellMasteryXP(sp)
-        EndIf
+; Player spell casts, forwarded by the DLL (native TESSpellCastEvent sink,
+; player-filtered before any VM dispatch). Replaces the GLOBAL
+; RegisterForActorAction(2) listener — the same all-actors VM tax the
+; weapon-swing watch had (v0.9.8) — with a per-cast cost of zero for
+; everyone but the player. sender = the spell form.
+Event OnNativePlayerSpellCast(String eventName, String strArg, Float numArg, Form sender)
+    ; Per-school combat gating lives in GrantSpellMasteryXP:
+    ; Illusion and Alteration train out of combat (utility schools
+    ; cast mostly outside a fight); the rest require combat so
+    ; casting at walls trains nothing.
+    Spell sp = sender as Spell
+    If sp
+        GrantSpellMasteryXP(sp)
     EndIf
 EndEvent
 

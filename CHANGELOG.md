@@ -5,6 +5,16 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## Unreleased
+
+### Fixed
+- **Magic XP no longer taxes the whole load order.** The last global
+  Papyrus listener (RegisterForActorAction(2), spell-fire for EVERY actor)
+  is replaced by a native spell-cast sink in MRO.dll that filters to the
+  player before any script dispatch — the same de-globalization the
+  weapon-swing watch got in v0.9.8. SCRIPT_VERSION 10 unregisters the old
+  listener on existing saves. XP math unchanged.
+
 ## v0.12.0 — 2026-07-10 (alpha)
 
 ### Added
