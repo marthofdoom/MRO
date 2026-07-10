@@ -4,7 +4,7 @@ All notable changes to Marth Requiem Overhaul. Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## Unreleased (v0.10.0)
+## v0.10.0 — 2026-07-09 (alpha)
 
 ### Added
 - **Progress tab.** Per-skill mastery levels and percent-to-next now live on
