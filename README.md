@@ -49,7 +49,7 @@ extends the top of the curve; it doesn't reshape the rest of it.
 
 **Isn't it too easy to become overpowered?**
 Getting there is a long, earned road. A mastery skill only *begins* at base
-100 — already a major Requiem investment — and then trains through real use
+100, and then trains through real use
 on a cost curve that rises steeply past the cap, so each mastery level costs
 progressively more. Weapon XP only counts hits on living, hostile targets and
 is normalized to your own typical blow, so weak-mob farming earns no faster
@@ -57,7 +57,7 @@ than real fighting. The headline
 ceilings raise the bar further: 99% physical DR needs best-in-list gear *and*
 full armor mastery, and elemental absorb only begins once you've stacked a
 resistance past 100%, itself a deliberate build. There is no quick path to
-the top.
+the top. I doubt most people will even get close at recomended settings.
 
 **Can I turn it down, or off?**
 Yes. Every feature toggles independently in the MCM, and the numbers are
