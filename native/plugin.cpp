@@ -12,6 +12,7 @@
 
 #include <fstream>
 #include <filesystem>
+#include <unordered_set>
 
 namespace {
 
@@ -147,6 +148,114 @@ void ReadIni() {
                  g_drHookWanted ? 1 : 0, g_absorbHookWanted ? 1 : 0);
 }
 
+// ── Magic capstones: master spells one-handed at 50, dual-cast at 100 ──
+// Per school: at mastery 50 that school's master (BothHands) spells flip to
+// RightHand — castable in one hand but NOT dual-castable (can't occupy the
+// left hand); at mastery 100 they flip to EitherHand, which adds dual-cast
+// eligibility (still gated by the actor owning the school's dual-cast perk —
+// we never grant it). The equip slot enforces "no dual-cast until 100"
+// structurally. Slot writes are runtime-only (never saved), so a fresh
+// session starts vanilla and we re-apply on load / level-up / magic-menu
+// close; toggling mastery off restores BothHands live.
+namespace Capstones {
+
+constexpr std::uint32_t kSlotRightHand = 0x00013F42;   // Skyrim.esm BGSEquipSlot
+constexpr std::uint32_t kSlotEitherHand = 0x00013F44;
+constexpr std::uint32_t kSlotBothHands = 0x00013F45;
+
+// SkillIndex (mastery globals 0x850+idx) for each magic school.
+int SchoolIndex(RE::ActorValue a_school) {
+    switch (a_school) {
+    case RE::ActorValue::kDestruction: return 5;
+    case RE::ActorValue::kRestoration: return 6;
+    case RE::ActorValue::kAlteration:  return 7;
+    case RE::ActorValue::kConjuration: return 8;
+    case RE::ActorValue::kIllusion:    return 9;
+    default:                           return -1;
+    }
+}
+
+// Spells we have retargeted this session, so mastery-off (or a bad global
+// read) restores them to BothHands instead of orphaning the change.
+std::unordered_set<std::uint32_t> g_flipped;
+
+void ApplyNow() {
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) {
+        return;
+    }
+    auto* right = RE::TESForm::LookupByID<RE::BGSEquipSlot>(kSlotRightHand);
+    auto* either = RE::TESForm::LookupByID<RE::BGSEquipSlot>(kSlotEitherHand);
+    auto* both = RE::TESForm::LookupByID<RE::BGSEquipSlot>(kSlotBothHands);
+    if (!right || !either || !both) {
+        return;
+    }
+    auto* dh = RE::TESDataHandler::GetSingleton();
+    const bool masteryOn = g_masteryEna && g_masteryEna->value != 0.0f;
+    for (auto* spell : player->GetActorRuntimeData().addedSpells) {
+        if (!spell || spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell) {
+            continue;
+        }
+        auto* slot = spell->GetEquipSlot();
+        if (slot != both && !g_flipped.contains(spell->GetFormID())) {
+            continue;  // not a master spell, or not one we manage
+        }
+        const int idx = SchoolIndex(spell->GetAssociatedSkill());
+        if (idx < 0) {
+            continue;
+        }
+        float lvl = 0.0f;
+        if (masteryOn && dh) {
+            if (auto* g = dh->LookupForm<RE::TESGlobal>(kFidMLBase + idx, "MRO.esp")) {
+                lvl = g->value;
+            }
+        }
+        RE::BGSEquipSlot* want = both;
+        const char* label = "BothHands (restored)";
+        if (lvl >= 100.0f) {
+            want = either;
+            label = "EitherHand (one-handed + dual-cast eligible)";
+        } else if (lvl >= 50.0f) {
+            want = right;
+            label = "RightHand (one-handed)";
+        }
+        if (slot != want) {
+            spell->SetEquipSlot(want);
+            spdlog::info("capstone: '{}' -> {}", spell->GetName(), label);
+        }
+        if (want == both) {
+            g_flipped.erase(spell->GetFormID());
+        } else {
+            g_flipped.insert(spell->GetFormID());
+        }
+    }
+}
+
+// Safe from any thread: form edits + spell-list iteration belong on the
+// main thread, so everything funnels through the SKSE task queue.
+void Apply() {
+    SKSE::GetTaskInterface()->AddTask([]() { ApplyNow(); });
+}
+
+// Catches master spells learned since the last pass (tome read, console)
+// without polling: re-evaluate whenever the magic menu closes.
+class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
+                                          RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
+        if (a_event && !a_event->opening && a_event->menuName == RE::MagicMenu::MENU_NAME) {
+            Apply();
+        }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+    static MenuSink* GetSingleton() {
+        static MenuSink instance;
+        return &instance;
+    }
+};
+
+}  // namespace Capstones
+
 // ── Mastery XP: native curve + level-ups (v0.9.11) ────────────────────
 // Mirrors the Papyrus curve exactly (MRO_StartupQuest.GrantMasteryXPAmount +
 // CurveMult + ActionsAtZero) so switching the drain from the 30s tick to the
@@ -235,6 +344,10 @@ public:
                 }
             }
             ShowLevelUpBanner(a_event->strArg.c_str(), level, endPct);
+            // A magic-school level-up may have crossed a capstone threshold.
+            if (idx >= 5 && idx <= 9) {
+                Capstones::Apply();
+            }
         }
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -750,6 +863,11 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         } else {
             spdlog::warn("BannerSink: no ModCallbackEventSource — level-up banner disabled");
         }
+        // Capstone re-check when the magic menu closes (new master spells).
+        if (auto* ui = RE::UI::GetSingleton()) {
+            ui->AddEventSink(Capstones::MenuSink::GetSingleton());
+            spdlog::info("Capstone MenuSink registered (MagicMenu close)");
+        }
         // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
         // they are live exactly when the DR hook is.
         AssertHandshake(g_nativeDR, g_drHookLive, "MRO_G_NativeDR", "data-loaded");
@@ -777,6 +895,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         AssertHandshake(g_nativeArmorXP, g_drHookLive, "MRO_G_NativeArmorXP", "post-load");
         // Drive the once-per-load bonus reconcile that replaces the 30s tick.
         MasteryXP::SendModEvent(kEvtGameLoaded, 0.0f);
+        // Slot writes are runtime-only, so every load starts from vanilla
+        // BothHands and the capstones must re-assert against the restored
+        // mastery globals.
+        Capstones::Apply();
         break;
     default:
         break;

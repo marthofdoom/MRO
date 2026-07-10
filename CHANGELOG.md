@@ -5,6 +5,27 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## Unreleased
+
+### Added
+- **Magic capstones (1.0 gate feature).** Per school: at mastery 50 that
+  school's master (two-handed) spells become castable one-handed
+  (RightHand equip slot — cannot dual-cast); at mastery 100 they become
+  dual-cast eligible (EitherHand — still requires the school's dual-cast
+  perk, which is never granted automatically). Applied natively by
+  MRO.dll; slot changes are runtime-only and re-asserted on load, on
+  magic level-ups, and when the magic menu closes (catches newly learned
+  tomes). Toggling the mastery system off restores vanilla two-handed
+  casting at the next check.
+
+### Changed
+- **Renamed to marth Resurgence Overhaul** (was marth Requiem Overhaul) as
+  the mod broadens beyond Requiem-based lists. File names, FormIDs, and
+  saves unchanged; all display strings (MCM, FOMOD, intro, ESP header)
+  carry the new name from this release on.
+- Requirements corrected: unused PapyrusUtil dropped, Address Library for
+  SKSE Plugins added (always a real dependency of MRO.dll).
+
 ## v0.10.0 — 2026-07-09 (alpha)
 
 ### Added
