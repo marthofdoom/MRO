@@ -10,6 +10,8 @@
 
 #include <spdlog/sinks/basic_file_sink.h>
 
+#include <excpt.h>
+
 #include <fstream>
 #include <filesystem>
 
