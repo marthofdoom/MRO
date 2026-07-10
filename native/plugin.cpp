@@ -10,8 +10,6 @@
 
 #include <spdlog/sinks/basic_file_sink.h>
 
-#include <excpt.h>
-
 #include <fstream>
 #include <filesystem>
 
@@ -44,7 +42,8 @@ constexpr std::uint32_t kFidXpmBase = 0x870;       // per-skill XP-speed mult, +
 // Mod-event names (DLL<->Papyrus). Kept in sync with MRO_StartupQuest.psc.
 constexpr const char* kEvtLevelUp = "MRO_MasteryLevelUp";     // DLL->Papyrus: skill idx leveled
 constexpr const char* kEvtGameLoaded = "MRO_GameLoaded";      // DLL->Papyrus: reconcile bonuses
-constexpr const char* kEvtPlaySound = "MRO_PlayLevelUpSound"; // Papyrus->DLL: play UISkillIncrease
+constexpr const char* kEvtBanner = "MRO_MasteryBanner";       // Papyrus->DLL: show skill-up banner + chime
+                                                              // strArg = display name, numArg = idx*1000 + level
 
 bool g_drHookWanted = true;     // default ON; MRO.ini bPhysicalDRHook=0 forces off
 bool g_drHookLive = false;      // site verified + thunk installed
@@ -155,7 +154,7 @@ void ReadIni() {
 // run here; magic/craft/speech stay Papyrus-side (already event-driven).
 namespace MasteryXP {
 
-// Fire a mod event to Papyrus (or, for kEvtPlaySound, to our own sink).
+// Fire a mod event to Papyrus (or, for kEvtBanner, to our own sink).
 void SendModEvent(const char* a_name, float a_num) {
     auto* source = SKSE::GetModCallbackEventSource();
     if (!source) {
@@ -165,50 +164,55 @@ void SendModEvent(const char* a_name, float a_num) {
     source->SendEvent(&ev);
 }
 
-// Play the vanilla skill-increase sound as a 2D UI sound. The Papyrus
-// Sound.Play sits in a 2D dead spot and never fired; BSAudioManager plays it
-// reliably regardless of menu state. Routed through a mod-event sink so every
-// level-up (native OR Papyrus-side magic/craft/speech) uses the same path.
-using UiPlaySoundFn = void (*)(const char*);
-
-// SEH-guarded raw call, isolated in its own function because __try cannot
-// share a frame with C++ unwinding. If the callee faults, we contain it and
-// report failure instead of taking down the game (or depending on a
-// third-party VEH to catch it, as happened 2026-07-09).
-bool SehUiPlaySound(UiPlaySoundFn a_fn, const char* a_edid) {
-    __try {
-        a_fn(a_edid);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-void PlayLevelUpSound() {
-    // Route through the game's own interface-sound function (the one menu
-    // clicks use), resolving the descriptor by EDITOR ID. Every BSSoundHandle
-    // variant — plain 2D, SetPosition at the player, SetObjectToFollow — returned
-    // play=true yet stayed inaudible in the field (2026-07-09): this descriptor's
-    // output model needs the UI route, not a spatialized handle.
-    //
-    // It must run on the MAIN thread: calling it straight from the mod-event
-    // sink thread read-AV'd inside a callee (ID 20166+0x9, 2026-07-09) — only a
-    // third-party VEH recovery kept the game alive. Defer via the SKSE task
-    // queue (runs in the main game loop), and keep the SEH guard so a residual
-    // fault degrades to "no sound" + a log line, never a CTD.
-    // "UISkillIncreaseSD" = SNDR 0x3C7CF EDID, verified against Skyrim.esm.
-    SKSE::GetTaskInterface()->AddTask([]() {
-        static REL::Relocation<UiPlaySoundFn> uiPlaySound{ RELOCATION_ID(52054, 52941) };
-        const bool ok = SehUiPlaySound(uiPlaySound.get(), "UISkillIncreaseSD");
-        if (ok) {
-            spdlog::info("level-up sound: UI PlaySound(UISkillIncreaseSD) ok (main thread)");
+// The vanilla skill-up experience is ONE flash call on the HUD movie:
+// QuestUpdateBaseInstance.ShowNotification(text, status, soundID,
+// objectiveCount, type, level, startPct, endPct) — banner, chime, and the
+// animated progress bar together (type 1 = skill; the widget itself composes
+// "<text> increased to <level>"). CSF's ShowSkillIncreasedMessage sends only
+// the text-only HUDData, which is why mastery level-ups never had audio, and
+// every direct sound attempt (BSSoundHandle in all variants; a raw relocation
+// call that read-AV'd off-thread) failed. Mechanism verified against the
+// New-Skill-Menu and MinimalSkills sources; runs on the UI task queue.
+void ShowLevelUpBanner(std::string a_name, int a_level, float a_endPct) {
+    SKSE::GetTaskInterface()->AddUITask([a_name = std::move(a_name), a_level, a_endPct]() {
+        bool shown = false;
+        if (auto* ui = RE::UI::GetSingleton()) {
+            if (const auto menu = ui->GetMenu<RE::HUDMenu>(RE::HUDMenu::MENU_NAME); menu && menu->uiMovie) {
+                RE::GFxValue quest;
+                if (menu->uiMovie->GetVariable(&quest, "_root.HUDMovieBaseInstance.QuestUpdateBaseInstance")) {
+                    float endPct = a_endPct;
+                    if (endPct < 0.0f) {
+                        endPct = 0.0f;
+                    } else if (endPct > 1.0f) {
+                        endPct = 1.0f;
+                    }
+                    RE::GFxValue args[8];
+                    args[0] = a_name.c_str();          // notification text
+                    args[1] = "";                      // status line
+                    args[2] = "UISkillIncreaseSD";     // the vanilla skill-up chime
+                    args[3] = 0;                       // objective count
+                    args[4] = 1;                       // type 1 = skill banner
+                    args[5] = static_cast<double>(a_level);
+                    args[6] = 0.0;                     // bar animates from empty
+                    args[7] = static_cast<double>(endPct);
+                    shown = quest.Invoke("ShowNotification", nullptr, args, 8);
+                }
+            }
+        }
+        if (shown) {
+            spdlog::info("level-up banner: '{}' {} shown (flash widget, with chime)", a_name, a_level);
         } else {
-            spdlog::warn("level-up sound: UI PlaySound faulted even on the main thread — SEH-contained; mechanism is wrong, revert it");
+            // A HUD replacer without the vanilla widget: plain corner text +
+            // CommonLib's own UI-sound wrapper (safe here: UI task = main thread).
+            const std::string text = a_name + " increased to " + std::to_string(a_level);
+            RE::DebugNotification(text.c_str());
+            RE::PlaySound("UISkillIncreaseSD");
+            spdlog::warn("level-up banner: ShowNotification unavailable — DebugNotification + PlaySound fallback");
         }
     });
 }
 
-class SoundSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
+class BannerSink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
 public:
     RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
                                           RE::BSTEventSource<SKSE::ModCallbackEvent>*) override {
@@ -217,15 +221,25 @@ public:
         // BSFixedString==BSFixedString pointer compare (_data==_data) instead of
         // a case-insensitive strncmp — near-zero, so a busy event stream costs us
         // nothing. We only do real work on our own event.
-        static const RE::BSFixedString kPlaySound{ kEvtPlaySound };
-        if (a_event && a_event->eventName == kPlaySound) {
-            spdlog::info("SoundSink: {} received", kEvtPlaySound);
-            PlayLevelUpSound();
+        static const RE::BSFixedString kBannerName{ kEvtBanner };
+        if (a_event && a_event->eventName == kBannerName) {
+            const int packed = static_cast<int>(a_event->numArg);
+            const int idx = packed / 1000;    // SkillIndex 0-13
+            const int level = packed % 1000;
+            float endPct = 0.0f;
+            if (idx >= 0 && idx < 14) {
+                if (auto* dh = RE::TESDataHandler::GetSingleton()) {
+                    if (auto* g = dh->LookupForm<RE::TESGlobal>(kFidMRBase + idx, "MRO.esp")) {
+                        endPct = g->value;
+                    }
+                }
+            }
+            ShowLevelUpBanner(a_event->strArg.c_str(), level, endPct);
         }
         return RE::BSEventNotifyControl::kContinue;
     }
-    static SoundSink* GetSingleton() {
-        static SoundSink instance;
+    static BannerSink* GetSingleton() {
+        static BannerSink instance;
         return &instance;
     }
 };
@@ -727,13 +741,14 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
                 g_xpm[i] = dh->LookupForm<RE::TESGlobal>(kFidXpmBase + i, "MRO.esp");
             }
         }
-        // Sink Papyrus's MRO_PlayLevelUpSound so magic/craft/speech level-ups
-        // (still Papyrus-side) share the native 2D sound path too.
+        // Sink Papyrus's MRO_MasteryBanner so every level-up — native
+        // weapon/armor AND Papyrus-side magic/craft/speech — shows the same
+        // vanilla-styled banner + chime through one path.
         if (auto* mc = SKSE::GetModCallbackEventSource()) {
-            mc->AddEventSink(MasteryXP::SoundSink::GetSingleton());
-            spdlog::info("SoundSink registered for {}", kEvtPlaySound);
+            mc->AddEventSink(MasteryXP::BannerSink::GetSingleton());
+            spdlog::info("BannerSink registered for {}", kEvtBanner);
         } else {
-            spdlog::warn("SoundSink: no ModCallbackEventSource — level-up sound disabled");
+            spdlog::warn("BannerSink: no ModCallbackEventSource — level-up banner disabled");
         }
         // Weapon-XP and armor-XP ride the DR weapon-hit thunk (same site), so
         // they are live exactly when the DR hook is.

@@ -216,7 +216,6 @@ Event OnNativeMasteryLevelUp(String eventName, String strArg, Float numArg, Form
     If lg
         newLevel = lg.GetValueInt()
     EndIf
-    CustomSkills.ShowSkillIncreaseMessage(sid, newLevel)
     AnnounceMasteryLevelUp(sid, newLevel)
     RefreshBonusForIndex(idx)
     PublishBridgeGlobals()   ; armor mastery fraction feeds the native DR calc
@@ -459,7 +458,7 @@ Function TestGrantArmorMastery(Bool heavy, Int levels)
         newLevel = cap as Int
     EndIf
     lg.SetValue(newLevel as Float)
-    CustomSkills.ShowSkillIncreaseMessage(id, newLevel)
+    AnnounceMasteryLevelUp(id, newLevel)
     PublishBridgeGlobals()
     If MasteryEnabled()
         UpdateArmorMasteryBonuses()
@@ -726,7 +725,6 @@ Function GrantMasteryXP(String skillId, Int currentMastery)
         If lg
             lg.SetValue(newLevel as Float)
         EndIf
-        CustomSkills.ShowSkillIncreaseMessage(skillId, newLevel)
         AnnounceMasteryLevelUp(skillId, newLevel)
     EndIf
     GlobalVariable rg = MasteryRatioGlobalByIndex(idx)
@@ -775,7 +773,6 @@ Function GrantMasteryXPAmount(String skillId, Int currentMastery, Float actions)
             If lg
                 lg.SetValue(n as Float)
             EndIf
-            CustomSkills.ShowSkillIncreaseMessage(skillId, n)
             AnnounceMasteryLevelUp(skillId, n)
         EndIf
     EndWhile
@@ -1395,15 +1392,19 @@ String Function GetMasteryHoverTextByIndex(Int idx)
     Return head
 EndFunction
 
-; Unmissable "you leveled a mastery" feedback: corner notification plus
-; the vanilla skill-increase sound (Skyrim.esm UISkillIncrease 0x018538).
-; CSF's ShowSkillIncreaseMessage alone proved too subtle to notice.
+; ONE polished, vanilla-styled skill-up banner: text + chime + animated
+; progress bar, rendered by the DLL through the HUD's own ShowNotification
+; widget (the exact call the engine makes for real skill-ups). Replaces the
+; old CSF text-only HUD message + Debug.Notification double-up and the four
+; failed sound attempts. strArg carries the display name; numArg packs
+; skillIndex*1000 + newLevel so the DLL can read that skill's progress
+; ratio global for the bar.
 Function AnnounceMasteryLevelUp(String skillId, Int newLevel)
-    Debug.Notification(MasteryLabel(skillId) + " Mastery increased to " + newLevel)
-    ; Papyrus Sound.Play on a 2D UI sound sits in a dead spot and never fired.
-    ; Route it to the DLL, which plays UISkillIncrease via BSAudioManager
-    ; regardless of menu state. No-op if the DLL isn't installed.
-    SendModEvent("MRO_PlayLevelUpSound")
+    Int idx = SkillIndex(skillId)
+    If idx < 0
+        Return
+    EndIf
+    SendModEvent("MRO_MasteryBanner", MasteryLabel(skillId) + " Mastery", (idx * 1000 + newLevel) as Float)
 EndFunction
 
 ; ===============================================================
