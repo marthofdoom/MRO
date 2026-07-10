@@ -39,16 +39,22 @@ deleted or overwritten.
   itemization) — MRO.log is quiet in normal play again.
 
 ### Fixed
-- **Level-up sound (attempt #5).** Every positional BSSoundHandle variant
-  (plain 2D, SetPosition at the player, v0.9.12's SetObjectToFollow)
-  returned play=true yet was inaudible — the descriptor's output model
-  needs the game's interface-sound route ("UISkillIncreaseSD", SNDR
-  0x3C7CF EDID verified against Skyrim.esm; AL ID 52054/52941). Attempt #4
-  called it straight from the mod-event sink thread and read-AV'd inside a
-  callee (only SkyrimCrashGuard's VEH recovery prevented a CTD at
-  level-up). Now deferred to the main thread via the SKSE task queue AND
-  SEH-guarded, so worst case degrades to "no sound + warn line", never a
-  crash. Needs an ear-test to confirm.
+- **Level-up feedback rebuilt on the vanilla skill-up banner — sound
+  included.** Root cause found by reading how the engine actually does it
+  (via the New-Skill-Menu / MinimalSkills / CSF sources): the real skill-up
+  experience is ONE flash call — the HUD's
+  `QuestUpdateBaseInstance.ShowNotification(text, status, soundID, ...,
+  level, startPct, endPct)` — banner, `UISkillIncreaseSD` chime, and the
+  animated progress bar together. CSF's message API sends a text-only HUD
+  message, which is why masteries never had audio; every direct sound
+  attempt (all BSSoundHandle variants; a raw relocation call that
+  read-AV'd off the main thread — only SkyrimCrashGuard's VEH recovery
+  prevented a CTD at level-up) was aiming at the wrong mechanism. Mastery
+  level-ups now show a single vanilla-styled banner ("One-Handed Mastery
+  increased to 5") with the chime and a progress bar fed from the real
+  mastery ratio, replacing the old CSF-message + corner-notification
+  double-up. Fallback for HUD replacers without the widget:
+  DebugNotification + CommonLib's own PlaySound, on the UI thread.
 
 ### Notes
 - DLL banner synced to v0.10.0 this build (was v0.9.12).
