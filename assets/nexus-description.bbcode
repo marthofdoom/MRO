@@ -9,9 +9,11 @@ Built entirely on Linux with no Creation Kit and no xEdit: the plugin is generat
 [size=5][b]Features[/b][/size]
 [list]
 [*][b]Elemental absorb[/b] — resistances scale past 100%; above 100%, that element's incoming damage heals you instead (full absorb at a configurable resistance). Computed per hit by the SKSE plugin from the real post-skill/perk magnitude.
-[*][b]Physical DR past the armor cap[/b] — damage reduction keeps scaling beyond the engine's cap, gated and ceilinged by your armor mastery. 99% DR demands best-in-list gear [i]and[/i] full mastery; the target is calibrated to your load order's actual best heavy set.
-[*][b]14-skill Mastery system[/b] (via Custom Skills Framework) — each skill unlocks at base 100 and trains through real use on a steeply rising cost curve. Weapon and armor XP are credited per hit, damage-scaled and normalized to your own typical blow; magic trains by magicka actually spent. Level-ups show the real vanilla skill-up banner, chime and all. Bonuses at cap: weapons +50% damage, armor +300 rating, magic +50 effective skill, crafting +25%, a Speech barter ladder, and raised temper caps.
-[*][b]MCM[/b] — a Progress page with every mastery's level and percent-to-next, feature toggles, tuning sliders, and a live status panel showing your real DR% and per-element absorb.
+[*][b]Physical DR past the armor cap[/b] — damage reduction keeps scaling beyond the engine's cap, gated and ceilinged by your armor mastery. 99% DR demands best-in-list gear [i]and[/i] full mastery. Only EARNED armor counts past the cap: wards and flesh spells protect fully up to the engine cap but cannot push beyond it.
+[*][b]14-skill Mastery system[/b] (via Custom Skills Framework) — each skill unlocks at base 100 and trains through real use on a steeply rising cost curve. Weapon and armor XP are credited per hit, damage-scaled and normalized to your own typical blow; magic trains by magicka actually spent. Level-ups show the real vanilla skill-up banner, chime and all.
+[*][b]Magic capstones[/b] — at mastery 50, a school's master (two-handed) spells become castable one-handed; at mastery 100 they become dual-cast eligible (the school's dual-cast perk is still required — dual-casting a master spell is an earned achievement).
+[*][b]Honest status[/b] — the magic menu's Active Effects page shows your real damage reduction and strongest-element absorb, live; the MCM adds a Progress page for all 14 masteries, feature toggles, tuning sliders, and a full Live Status panel.
+[*][b]Zero script tax[/b] — all combat and cast detection is native and player-filtered. No polling, no global Papyrus listeners, no heartbeat.
 [/list]
 
 [size=5][b]FAQ[/b][/size]
@@ -25,12 +27,14 @@ Getting there is a long, earned road. A mastery only [i]begins[/i] at base skill
 [b]Can I turn it down, or off?[/b]
 Yes. Every feature toggles independently in the MCM, and the numbers are sliders. If a feature isn't to your taste, switch it off; if only the pacing is, tune it.
 
+[size=5][b]Install[/b][/size]
+One flat package — no FOMOD, every choice is a runtime MCM toggle. The optional file rebalances the Experience mod's ini (only take it if you run Experience). Upgrading from any 0.x: overwrite and play; migrations run in place.
+
 [size=5][b]Requirements[/b][/size]
 SKSE64, Address Library for SKSE Plugins, SkyUI 5.2+, Custom Skills Framework, and powerofthree's Papyrus Extender. The bundled MRO.dll is part of the mod and required.
 
 [size=5][b]Notes[/b][/size]
 [list]
-[*]Alpha, under active development. Feedback on pacing is especially welcome.
-[*]Recently renamed from "marth Requiem Overhaul" as the mod broadens beyond Requiem — the v0.10.0 installer still shows the old name in a few places; file names and saves are unaffected.
 [*]Contains only original work; redistributes no assets from Requiem or any other mod.
+[*]Source, docs, and full changelog: github.com/marthofdoom/MRO
 [/list]

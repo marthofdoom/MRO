@@ -1,0 +1,14 @@
+v1.0.0 — first stable release
+
+New since the 0.10.0 alpha:
+- Magic capstones: master spells castable one-handed at mastery 50, dual-cast eligible at 100 (school's dual-cast perk still required).
+- Past-cap DR gates on EARNED armor only: wards and flesh spells protect fully up to the engine cap but no longer push past it. Perks, permanent abilities, and enchantments count in full.
+- Honest displays: the magic menu's Active Effects page shows live "Physical Damage Reduction" and "Elemental Absorb" percentages; MCM Live Status shows earned armor rating and effective DR.
+- The "Physical DR Past 75%" MCM toggle now actually gates the native hook.
+- Level-up feedback is the real vanilla skill-up banner with the chime and animated progress bar (no more silent or doubled notifications).
+- Renamed from "marth Requiem Overhaul" — file names, FormIDs, and saves unchanged.
+- FOMOD retired: one flat package; the rebalanced Experience.ini is a separate optional file so plain installs never overwrite your Experience settings.
+- Performance: the last global Papyrus listener removed — all combat/cast detection is native and player-filtered.
+- Requirements corrected: PapyrusUtil dropped (unused), Address Library listed.
+
+Upgrade from any 0.x: overwrite and play (full game restart required; in-place migrations handle the rest).
