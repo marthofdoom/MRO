@@ -120,7 +120,7 @@ void WriteDefaultIni(const std::filesystem::path& path) {
         spdlog::warn("MRO.ini: could not write default to {}", path.string());
         return;
     }
-    out << "; marth Requiem Overhaul - native hook settings.\n"
+    out << "; marth Resurgence Overhaul - native hook settings.\n"
         << "; Both default ON. Setting a value to 0 DISABLES that system\n"
         << "; entirely (there is no Papyrus fallback). Each hook self-verifies\n"
         << "; the game binary and stands down safely on a mismatch (see MRO.log).\n"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MRO_GenerateESP.py
-Generates MRO.esp for Marth Requiem Overhaul without needing SSEEdit/xEdit.
+Generates MRO.esp for Marth Resurgence Overhaul without needing SSEEdit/xEdit.
 Produces a byte-for-byte valid Skyrim SE plugin.
 
 Run: python3 MRO_GenerateESP.py [output_dir]
@@ -204,7 +204,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Requiem Overhaul v0.10.0"))
+    body += subrec('SNAM', zstr("Marth Resurgence Overhaul v0.10.0"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
@@ -320,7 +320,7 @@ def make_mgefs() -> bytes:
     body += subrec('FULL', zstr("MRO - Elemental Absorb"))
     body += subrec('DATA', mgef_data(effect_type=1, primary_av=0xFFFFFFFF, flags=0x600))
     body += subrec('SNDD', b'')
-    body += subrec('DNAM', zstr("Marth Requiem Overhaul: elemental resistances above 100% convert that element's damage into healing. Full absorption at the MCM-configured resistance (default 200%). Overhealing spills into stamina and magicka."))
+    body += subrec('DNAM', zstr("Marth Resurgence Overhaul: elemental resistances above 100% convert that element's damage into healing. Full absorption at the MCM-configured resistance (default 200%). Overhealing spills into stamina and magicka."))
     out.write(record('MGEF', FID_ABSORB_MGEF, 0, body))
 
     # ── CarryWeightMGEF: fortify CarryWeight, +150 ──
@@ -335,7 +335,7 @@ def make_mgefs() -> bytes:
     body += subrec('FULL', zstr("MRO - Carry Weight Bonus"))
     body += subrec('DATA', mgef_data(effect_type=34, primary_av=AV_CARRYWEIGHT, flags=0x200802, f48=0.5))
     body += subrec('SNDD', b'')
-    body += subrec('DNAM', zstr("Marth Requiem Overhaul: permanent bonus carry weight for you and your followers. Toggleable in the MRO MCM."))
+    body += subrec('DNAM', zstr("Marth Resurgence Overhaul: permanent bonus carry weight for you and your followers. Toggleable in the MRO MCM."))
     out.write(record('MGEF', FID_CW_MGEF, 0, body))
 
     # ── EventsMGEF: hidden receiver for PO3 per-form events ──

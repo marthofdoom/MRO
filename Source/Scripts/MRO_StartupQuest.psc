@@ -367,7 +367,7 @@ Function RunUpgrade(Int fromVersion)
     ; Only announce true mid-playthrough upgrades, and only when the
     ; intro already ran (a fresh install announces via the intro).
     If MRO_SetupDone && MRO_SetupDone.GetValueInt() == 1
-        Debug.Notification("marth Requiem Overhaul: updated in place, settings re-applied.")
+        Debug.Notification("marth Resurgence Overhaul: updated in place, settings re-applied.")
     EndIf
 EndFunction
 
@@ -375,7 +375,7 @@ EndFunction
 ; FIRST-RUN INTRO
 ; ===============================================================
 Function RunFirstTimeSetup()
-    Debug.MessageBox("marth Requiem Overhaul is active.\n\nThis mod rebalances Requiem's late-game power scaling:\n\n- Elemental resist above 100% absorbs that element's damage as health\n  (101% = 1% absorbed, 200% = full absorb)\n- Physical DR scales past the 75% armor cap, gated by your armor mastery\n- 14-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
+    Debug.MessageBox("marth Resurgence Overhaul is active.\n\nThis mod rebalances late-game power scaling:\n\n- Elemental resist above 100% absorbs that element's damage as health\n  (101% = 1% absorbed, 200% = full absorb)\n- Physical DR scales past the 75% armor cap, gated by your armor mastery\n- 14-skill Mastery system unlocks after each base skill reaches 100\n\nAll features can be toggled in the MRO MCM under Features.\nMastery cap (default 100, up to 200) is adjustable under Mastery.")
 EndFunction
 
 ; ===============================================================

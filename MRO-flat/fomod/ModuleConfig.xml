@@ -2,7 +2,7 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
 
-  <moduleName>marth Requiem Overhaul</moduleName>
+  <moduleName>marth Resurgence Overhaul</moduleName>
 
   <requiredInstallFiles>
     <file source="MRO.esp" destination="MRO.esp"/>

@@ -29,7 +29,7 @@ fi
 
 # Stamp version into the MCM and recompile all scripts
 sed -i "s/MRO_VERSION = \"[^\"]*\"/MRO_VERSION = \"${VER}\"/" Source/Scripts/MRO_MCM.psc
-sed -i "s/Marth Requiem Overhaul v[0-9.]*/Marth Requiem Overhaul v${VER}/" MRO_GenerateESP.py
+sed -i "s/Marth Resurgence Overhaul v[0-9.]*/Marth Resurgence Overhaul v${VER}/" MRO_GenerateESP.py
 # Stamp the FOMOD version so info.xml never drifts from the release
 sed -i "s#<Version>[0-9.]*</Version>#<Version>${VER}</Version>#" MRO-flat/fomod/info.xml
 tools/compile.sh all

@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to Marth Requiem Overhaul. Every released version is
+All notable changes to marth Resurgence Overhaul (formerly marth Requiem
+Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
