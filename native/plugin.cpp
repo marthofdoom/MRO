@@ -465,7 +465,8 @@ namespace PhysicalDR {
 // 2026-07-09: a ward added ~1650 temporary AR that must NOT feed past-cap DR,
 // while ~365 of standing ability AR must remain.)
 float CastSpellArmor(RE::Actor* a_victim) {
-    const auto* effects = a_victim->GetActiveEffectList();
+    auto* mt = a_victim->AsMagicTarget();
+    auto* effects = mt ? mt->GetActiveEffectList() : nullptr;
     if (!effects) {
         return 0.0f;
     }
