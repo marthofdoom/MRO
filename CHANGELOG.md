@@ -43,9 +43,8 @@ deleted or overwritten.
   granted by actively cast spells (wards, flesh spells) — worn armor,
   perks, permanent abilities, and enchantments still count in full, and
   hostile armor-melt debuffs still hurt. Cast-spell AR keeps its full
-  value up to the engine's 75% cap; it just can't push DR past it. The
-  MCM Live Status "Armor Rating"/"Physical DR" rows still show full-AR
-  numbers — aligning the displays is the status-page 1.0 work.
+  value up to the engine's 75% cap; it just can't push DR past it. (The
+  display alignment shipped in this same release — see Added.)
 
 ## v0.11.0 — 2026-07-10 (alpha)
 
