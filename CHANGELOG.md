@@ -5,7 +5,13 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## Unreleased
+## v1.0.0 — 2026-07-10
+
+**First stable release.** Every 1.0 gate is field-verified: magic capstones
+(master spells one-handed at mastery 50, dual-cast eligible at 100), the
+past-cap DR ladder gating on earned armor only (wards and flesh spells
+itemized out), and truthful status displays in both the MCM and the magic
+menu's Active Effects page. One flat package, no FOMOD, MCM-managed.
 
 ### Fixed
 - **Magic XP no longer taxes the whole load order.** The last global
