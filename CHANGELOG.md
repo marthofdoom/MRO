@@ -5,6 +5,18 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## Unreleased
+
+### Fixed
+- **Past-cap DR now gates on EARNED armor only (1.0 gate item).** The DR
+  ladder itemizes the victim's active effects and excludes armor rating
+  granted by actively cast spells (wards, flesh spells) — worn armor,
+  perks, permanent abilities, and enchantments still count in full, and
+  hostile armor-melt debuffs still hurt. Cast-spell AR keeps its full
+  value up to the engine's 75% cap; it just can't push DR past it. The
+  MCM Live Status "Armor Rating"/"Physical DR" rows still show full-AR
+  numbers — aligning the displays is the status-page 1.0 work.
+
 ## v0.11.0 — 2026-07-10 (alpha)
 
 ### Added

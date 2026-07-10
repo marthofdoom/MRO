@@ -455,6 +455,55 @@ void Credit(int a_idx, float a_actions) {
 // ── M2: physical DR past the engine cap, per hit ─────────────────────
 namespace PhysicalDR {
 
+// Armor rating granted by actively CAST spells (wards, flesh spells): excluded
+// from the past-cap ladder, which gates EARNED protection — worn armor, perks,
+// and permanent abilities/enchantments. Perks are not active effects, and
+// abilities/enchants/potions are not SpellType kSpell, so they all pass
+// through untouched; only kSpell sources are itemized. Detrimental effects
+// (armor-melt debuffs) are skipped so a hostile debuff still lowers the
+// ladder's input like it lowers everything else. (Task #12; field calibration
+// 2026-07-09: a ward added ~1650 temporary AR that must NOT feed past-cap DR,
+// while ~365 of standing ability AR must remain.)
+float CastSpellArmor(RE::Actor* a_victim) {
+    const auto* effects = a_victim->GetActiveEffectList();
+    if (!effects) {
+        return 0.0f;
+    }
+    float sum = 0.0f;
+    for (const auto& ae : *effects) {
+        if (!ae || !ae->effect || !ae->effect->baseEffect) {
+            continue;
+        }
+        if (ae->flags.any(RE::ActiveEffect::Flag::kInactive) ||
+            ae->flags.any(RE::ActiveEffect::Flag::kDispelled)) {
+            continue;
+        }
+        const auto* spell = ae->spell ? ae->spell->As<RE::SpellItem>() : nullptr;
+        if (!spell || spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell) {
+            continue;
+        }
+        const auto* base = ae->effect->baseEffect;
+        using Arch = RE::EffectSetting::Archetype;
+        const auto arch = base->GetArchetype();
+        if (arch != Arch::kValueModifier && arch != Arch::kPeakValueModifier &&
+            arch != Arch::kDualValueModifier) {
+            continue;
+        }
+        // Dual-AV secondary channel ignored: no known ward/flesh effect puts
+        // DamageResist on the secondary slot.
+        if (base->data.primaryAV != RE::ActorValue::kDamageResist) {
+            continue;
+        }
+        if (base->data.flags.any(RE::EffectSetting::EffectSettingData::Flag::kDetrimental)) {
+            continue;
+        }
+        if (ae->magnitude > 0.0f) {
+            sum += ae->magnitude;  // runtime magnitude: dual-cast/perk scaling included
+        }
+    }
+    return sum;
+}
+
 void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     if (!a_victim || !g_laFrac || !g_haFrac || !g_dr99) {
         return;
@@ -491,10 +540,16 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
         return;
     }
 
-    const float ar = a_victim->AsActorValueOwner()->GetActorValue(RE::ActorValue::kDamageResist);
+    // The LADDER reads earned AR only (cast spells itemized out); the engine
+    // already mitigated this hit from FULL AR, so engineDR below must use the
+    // full value or the rescale factor misstates what was actually applied.
+    // Net effect: wards/flesh spells keep their full value up to the engine
+    // cap — they just can't push DR past it.
+    const float arFull = a_victim->AsActorValueOwner()->GetActorValue(RE::ActorValue::kDamageResist);
+    const float ar = arFull - CastSpellArmor(a_victim);
     const float kink = cap / scale;
     if (ar <= kink) {
-        return;  // below the engine cap: vanilla handles it
+        return;  // earned AR below the engine cap: vanilla handles it
     }
 
     float target = g_dr99->value;
@@ -505,7 +560,7 @@ void Adjust(RE::Actor* a_victim, RE::HitData& a_hitData) {
     const float ceiling = cap + (99.0f - cap) * frac;
     ours = std::min(ours, std::min(ceiling, 99.0f));
 
-    const float engineDR = std::min(ar * scale, cap);
+    const float engineDR = std::min(arFull * scale, cap);
     if (ours <= engineDR) {
         return;
     }
