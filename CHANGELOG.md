@@ -5,7 +5,7 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## Unreleased
+## v0.12.0 — 2026-07-10 (alpha)
 
 ### Added
 - **Live Status tells the truth (status-page 1.0 work, part 1).** The DLL

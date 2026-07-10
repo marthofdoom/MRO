@@ -208,7 +208,7 @@ def make_tes4() -> bytes:
     hedr = struct.pack('<f', 1.70) + struct.pack('<I', 200) + struct.pack('<I', FID_SP_FLST + 1)
     body  = subrec('HEDR', hedr)
     body += subrec('CNAM', zstr("Marth"))
-    body += subrec('SNAM', zstr("Marth Resurgence Overhaul v0.11.0"))
+    body += subrec('SNAM', zstr("Marth Resurgence Overhaul v0.12.0"))
     for m in masters:
         body += subrec('MAST', zstr(m))
         body += subrec('DATA', struct.pack('<Q', 0))
