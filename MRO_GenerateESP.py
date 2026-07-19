@@ -85,7 +85,8 @@ FID_X_PENDARMOR    = OWN | 0x848  # bridge: DLL banks normalized armor hits-take
 FID_X_EFFAR        = OWN | 0x849  # bridge: DLL publishes the player's EARNED armor rating (cast-spell AR itemized out; MCM display)
 FID_X_EFFDR        = OWN | 0x84A  # (see line above)
 FID_DRSTATUS_MGEF  = OWN | 0x84B  # display-only: Active Effects row for physical DR (magnitude kept live by the DLL)
-FID_DRSTATUS_SPELL = OWN | 0x84C  # constant ability carrying it (player only, gated by MRO_F_ArmorCap)  # bridge: DLL publishes the player's effective physical DR percent (native ladder truth; MCM display)
+FID_DRSTATUS_SPELL = OWN | 0x84C  # constant ability carrying it (player only, gated by MRO_F_ArmorCap)
+FID_X_CAPTURED     = OWN | 0x84D  # bridge: bitmask of craft/speech skills whose XP the DLL captured this session (1=SM 2=AC 4=EN 8=SP)  # bridge: DLL publishes the player's effective physical DR percent (native ladder truth; MCM display)
 
 # Mastery LEVEL globals, one per skill in SkillIndex order (OH TH MK LA
 # HA DS RS AL CJ IL SM AC EN SP). Bound as each CSF skill's "level" in
@@ -249,6 +250,7 @@ GLOBALS = [
     ("MRO_X_PendArmor",    FID_X_PENDARMOR,   'f', 0.0),
     ("MRO_X_EffectiveAR",  FID_X_EFFAR,       'f', 0.0),
     ("MRO_X_EffectiveDR",  FID_X_EFFDR,       'f', 0.0),
+    ("MRO_X_CapturedSkills", FID_X_CAPTURED,  'f', 0.0),
 ]
 # Mastery level + ratio globals (see FID_ML_BASE comment)
 for _i, _sk in enumerate(MASTERY_SKILLS):

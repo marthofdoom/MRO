@@ -80,7 +80,7 @@ String _craftSkill = ""
 ; saves (new arrays, changed registrations, re-applied state). The
 ; saved _installedVersion lags behind after an update-in-place, and
 ; the next heartbeat runs RunUpgrade() exactly once.
-Int Property SCRIPT_VERSION = 10 AutoReadOnly
+Int Property SCRIPT_VERSION = 11 AutoReadOnly
 Int _installedVersion = 0
 
 ; Smithing temper caps as read from the load order before we scale them
@@ -128,6 +128,7 @@ Function RegisterMasteryEvents()
     RegisterForModEvent("MRO_MasteryLevelUp", "OnNativeMasteryLevelUp")
     RegisterForModEvent("MRO_GameLoaded", "OnNativeGameLoaded")
     RegisterForModEvent("MRO_PlayerSpellCast", "OnNativePlayerSpellCast")
+    RegisterForModEvent("MRO_SkillUse", "OnNativeSkillUse")
     ; PERF: action 0 (weapon swing) was a GLOBAL all-actors event and the biggest
     ; Papyrus tax in big fights. Explicitly unregister it (saves that ran an older
     ; MRO still hold the registration, so dropping the call is not enough), and
@@ -638,18 +639,62 @@ Event OnMenuOpen(String asMenuName)
     EndIf
 EndEvent
 
+; The DLL captures the load order's OWN skill XP for craft/speech skills
+; (engine funnel inside AddSkillExperience — MEO's enchanting grants, quest
+; rewards, any mod using the API). Once a skill has delivered captured XP
+; this session, its bit is set in MRO_X_CapturedSkills (1=SM 2=AC 4=EN 8=SP)
+; and the crude menu-session credit below stands down for that skill —
+; sessions remain only as the fallback for skills the list grants nothing to.
+Bool Function SkillCaptured(Int slotPow)
+    GlobalVariable g = Game.GetFormFromFile(0x84D, "MRO.esp") as GlobalVariable
+    If !g
+        Return False
+    EndIf
+    Return ((g.GetValueInt() / slotPow) % 2) == 1
+EndFunction
+
+; Captured skill XP -> mastery actions (strArg = SkillIndex, numArg = actions,
+; already EMA-normalized by the DLL so one typical grant == one action).
+Event OnNativeSkillUse(String eventName, String strArg, Float numArg, Form sender)
+    If !MasteryEnabled() || numArg <= 0.0
+        Return
+    EndIf
+    Int idx = strArg as Int
+    String sid = SkillIdFromIndex(idx)
+    If sid == ""
+        Return
+    EndIf
+    If PlayerRef.GetBaseActorValue(BaseAVNameFromIndex(idx)) < 100.0
+        Return
+    EndIf
+    GrantMasteryXPAmount(sid, GetMasteryLevel(sid), numArg)
+EndEvent
+
+String Function BaseAVNameFromIndex(Int idx)
+    If idx == 10
+        Return "Smithing"
+    ElseIf idx == 11
+        Return "Alchemy"
+    ElseIf idx == 12
+        Return "Enchanting"
+    ElseIf idx == 13
+        Return "Speechcraft"
+    EndIf
+    Return ""
+EndFunction
+
 Event OnMenuClose(String asMenuName)
     If asMenuName == "Crafting Menu"
-        If _craftSkill == "SM" && PlayerRef.GetBaseActorValue("Smithing") >= 100.0
+        If _craftSkill == "SM" && !SkillCaptured(1) && PlayerRef.GetBaseActorValue("Smithing") >= 100.0
             GrantMasteryXP(ID_SM, GetMasteryLevel(ID_SM))
-        ElseIf _craftSkill == "AC" && PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
+        ElseIf _craftSkill == "AC" && !SkillCaptured(2) && PlayerRef.GetBaseActorValue("Alchemy") >= 100.0
             GrantMasteryXP(ID_AC, GetMasteryLevel(ID_AC))
-        ElseIf _craftSkill == "EN" && PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
+        ElseIf _craftSkill == "EN" && !SkillCaptured(4) && PlayerRef.GetBaseActorValue("Enchanting") >= 100.0
             GrantMasteryXP(ID_EN, GetMasteryLevel(ID_EN))
         EndIf
         _craftSkill = ""
     ElseIf asMenuName == "BarterMenu"
-        If PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
+        If !SkillCaptured(8) && PlayerRef.GetBaseActorValue("Speechcraft") >= 100.0
             GrantMasteryXP(ID_SP, GetMasteryLevel(ID_SP))
         EndIf
     ElseIf asMenuName == "InventoryMenu" || asMenuName == "ContainerMenu"

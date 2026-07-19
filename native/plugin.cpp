@@ -34,6 +34,9 @@ constexpr std::uint32_t kFidEffDR = 0x84A;          // DLL->Papyrus: player's ef
 constexpr std::uint32_t kFidArmorCapEna = 0x805;    // MRO_F_ArmorCap: MCM toggle for past-cap DR
 constexpr std::uint32_t kFidAbsorbEna = 0x806;      // MRO_F_Absorb: MCM toggle for elemental absorb
 constexpr std::uint32_t kFidDRStatusMgef = 0x84B;   // display-only MGEF: Active Effects row for physical DR
+constexpr std::uint32_t kFidCapturedSkills = 0x84D; // DLL->Papyrus: bitmask of craft/speech skills that delivered
+                                                    // captured engine XP this session (1=SM 2=AC 4=EN 8=SP);
+                                                    // Papyrus session credit stands down for flagged skills
 constexpr std::uint32_t kFidAbsorbMgef = 0x800;     // absorb MGEF: magnitude shows strongest-element absorb %
 
 // Mastery XP is now applied natively (v0.9.11): the DLL reads the same knobs the
@@ -508,6 +511,89 @@ void Credit(int a_idx, float a_actions) {
 }
 
 }  // namespace MasteryXP
+
+// ── Skill capture: mastery listens to the load order's own skill XP ───────
+// Hooks the call to ImprovePlayerSkillPoints INSIDE PlayerCharacter::
+// AddSkillExperience — the engine funnel that direct skill-XP grants use
+// (MEO's soul feeding/discovery, quest rewards, any mod calling the API).
+// This is data the engine is already computing: no Experience mod, no SSL
+// interaction (mult-zeroing happens on the USE path, not here), no new
+// dependency. Captured amounts are EMA-normalized per skill (one typical
+// grant == one mastery action, so a grand soul counts more than a petty)
+// and forwarded to Papyrus, whose menu-session credit stands down per
+// skill once real captured XP has been seen this session.
+// Scope (v1.0.1): craft/speech skills only — combat and magic keep their
+// purpose-built per-hit / per-cast paths.
+namespace SkillCapture {
+
+constexpr const char* kEvtSkillUse = "MRO_SkillUse";  // DLL->Papyrus: strArg=SkillIndex, numArg=actions
+
+// AV skill id -> our SkillIndex (10 SM, 11 AC, 12 EN, 13 SP); -1 = not captured.
+int MasteryIndexFromAV(std::uint32_t a_av) {
+    switch (a_av) {
+    case 10: return 10;  // Smithing
+    case 16: return 11;  // Alchemy
+    case 23: return 12;  // Enchanting
+    case 17: return 13;  // Speech
+    default: return -1;
+    }
+}
+
+float g_emaGrant[4] = { 0.0f, 0.0f, 0.0f, 0.0f };  // typical grant per skill, session-scoped
+RE::TESGlobal* g_capturedSkills = nullptr;         // 0x84D bitmask (looked up at data-load)
+
+struct IpspThunk {
+    static void thunk(void* a_skills, std::uint32_t a_skillId, float a_exp,
+                      std::uint64_t a_unk1, std::uint32_t a_unk2, std::uint8_t a_unk3, bool a_unk4) {
+        const int idx = MasteryIndexFromAV(a_skillId);
+        if (idx >= 0 && a_exp > 0.0f) {
+            const int slot = idx - 10;
+            float& ema = g_emaGrant[slot];
+            const float ref = (ema > 0.0f) ? ema : a_exp;
+            ema = (ema <= 0.0f) ? a_exp : (0.9f * ema + 0.1f * a_exp);
+            const float actions = a_exp / ref;
+            if (g_capturedSkills) {
+                const int mask = static_cast<int>(g_capturedSkills->value);
+                g_capturedSkills->value = static_cast<float>(mask | (1 << slot));
+            }
+            if (auto* src = SKSE::GetModCallbackEventSource()) {
+                SKSE::ModCallbackEvent ev{ RE::BSFixedString(kEvtSkillUse),
+                                           RE::BSFixedString(std::to_string(idx)), actions, nullptr };
+                src->SendEvent(&ev);
+            }
+        }
+        func(a_skills, a_skillId, a_exp, a_unk1, a_unk2, a_unk3, a_unk4);
+    }
+    static inline REL::Relocation<decltype(thunk)> func;
+};
+
+// Self-verifying install, same discipline as the DR hook: scan the body of
+// AddSkillExperience (RELOCATION_ID verified: AE 40488 -> 0x736e20 on
+// 1.6.1170) for the E8 rel32 call whose target IS ImprovePlayerSkillPoints
+// (AE 41561 -> 0x77ae60, the function the Uncapper lineage entry-hooks).
+// No fixed offsets: if the call is not found, stand down with a log line.
+// (SE-side ids are best-effort; the mod targets AE 1.6.1170.)
+bool Install() {
+    const auto ase = REL::Relocation<std::uintptr_t>(RELOCATION_ID(39413, 40488)).address();
+    const auto ipsp = REL::Relocation<std::uintptr_t>(RELOCATION_ID(40554, 41561)).address();
+    for (std::uintptr_t off = 0; off < 0x180; ++off) {
+        const auto p = ase + off;
+        if (*reinterpret_cast<std::uint8_t*>(p) != 0xE8) {
+            continue;
+        }
+        const auto rel = *reinterpret_cast<std::int32_t*>(p + 1);
+        if (p + 5 + rel == ipsp) {
+            auto& trampoline = SKSE::GetTrampoline();
+            IpspThunk::func = trampoline.write_call<5>(p, IpspThunk::thunk);
+            spdlog::info("skill-capture hook installed (E8 at AddSkillExperience+0x{:X} -> ImprovePlayerSkillPoints)", off);
+            return true;
+        }
+    }
+    spdlog::warn("skill-capture: no E8 call to ImprovePlayerSkillPoints found in AddSkillExperience — standing down (menu-session credit remains)");
+    return false;
+}
+
+}  // namespace SkillCapture
 
 // ── M2: physical DR past the engine cap, per hit ─────────────────────
 namespace PhysicalDR {
@@ -1071,6 +1157,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             g_effAR = dh->LookupForm<RE::TESGlobal>(kFidEffAR, "MRO.esp");
             g_effDR = dh->LookupForm<RE::TESGlobal>(kFidEffDR, "MRO.esp");
             g_armorCapEna = dh->LookupForm<RE::TESGlobal>(kFidArmorCapEna, "MRO.esp");
+            SkillCapture::g_capturedSkills = dh->LookupForm<RE::TESGlobal>(kFidCapturedSkills, "MRO.esp");
 
             g_masteryEna = dh->LookupForm<RE::TESGlobal>(kFidMasteryEna, "MRO.esp");
             g_masteryGnt = dh->LookupForm<RE::TESGlobal>(kFidMasteryGnt, "MRO.esp");
@@ -1132,6 +1219,14 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         // mastery globals.
         Capstones::Apply();
         SKSE::GetTaskInterface()->AddTask([]() { PhysicalDR::PublishPlayerStatus(); });
+        // Session semantics for the capture state: the bitmask global is
+        // save-persisted, so clear stale bits and re-seed the grant EMAs.
+        if (SkillCapture::g_capturedSkills) {
+            SkillCapture::g_capturedSkills->value = 0.0f;
+        }
+        for (auto& ema : SkillCapture::g_emaGrant) {
+            ema = 0.0f;
+        }
         break;
     default:
         break;
@@ -1151,15 +1246,14 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     }
 
     ReadIni();
-    if (g_drHookWanted || g_absorbHookWanted) {
-        SKSE::AllocTrampoline(128);
-    }
+    SKSE::AllocTrampoline(192);  // DR + absorb + skill-capture call thunks
     if (g_drHookWanted) {
         g_drHookLive = PhysicalDR::Install();
     }
     if (g_absorbHookWanted) {
         g_absorbHookLive = Absorb::Install();
     }
+    SkillCapture::Install();
 
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
     return true;

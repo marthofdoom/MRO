@@ -5,6 +5,25 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
+## Unreleased (v1.0.1)
+
+### Added
+- **Mastery listens to the load order's own skill XP (craft/speech).** The
+  DLL captures the engine's skill-experience funnel (the call inside
+  AddSkillExperience, found by self-verifying scan — no fixed offsets) and
+  converts captured grants into mastery actions, EMA-normalized per skill
+  so one typical grant equals one action. Enchanting is the headline: with
+  MEO installed, mastery now trains from real enchanting practice — soul
+  feeding, gem discovery, destruction — with MEO's own quality scaling
+  (a grand soul counts ~more than a petty), instead of a flat credit per
+  menu visit. Works for any overhaul that grants skill XP through the
+  engine API; requires nothing new (no Experience mod — the hook is the
+  engine itself, resolved via Address Library).
+- The old menu-session credit automatically stands down per skill once
+  that skill delivers captured XP in a session, and remains as the
+  fallback for skills the load order grants nothing to (e.g. lists that
+  zero all skill use). No double-counting.
+
 ## v1.0.0 — 2026-07-10
 
 **First stable release.** Every 1.0 gate is field-verified: magic capstones
