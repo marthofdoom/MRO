@@ -5,7 +5,7 @@ Overhaul; renamed 2026-07-09). Every released version is
 archived permanently under `releases/vX.Y.Z/` — release folders are never
 deleted or overwritten.
 
-## Unreleased (v1.0.1)
+## v1.0.1 — 2026-07-19
 
 ### Added
 - **Mastery listens to the load order's own skill XP (craft/speech).** The
